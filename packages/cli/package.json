@@ -1,6 +1,6 @@
 {
-  "name": "@metrists/cli",
-  "version": "0.0.83",
+  "name": "metrists",
+  "version": "0.0.2",
   "description": "metrists - publish markdown files as a book",
   "publishConfig": {
     "access": "public"

@@ -45,7 +45,7 @@ export class InitCommand extends ConfigAwareCommand {
     ];
 
     if (isFirstRun) {
-      initialSetupPromises.push(this.cloneAndInstallTemplate());
+      initialSetupPromises.push(this.copyAndInstallTemplate());
     }
 
     await Promise.all(initialSetupPromises);
@@ -124,31 +124,26 @@ export class InitCommand extends ConfigAwareCommand {
     await addToGitIgnore(this.workingDirectory, itemsToIgnore);
   }
 
-  protected async cloneAndInstallTemplate() {
-    await this.cloneRepository();
-    console.log(chalk.green('Successfully Cloned Template'));
+  protected async copyAndInstallTemplate() {
+    await this.copyTemplate();
+    console.log(chalk.green('Successfully Added Template'));
     await this.spawnAndWaitAndStopIfError('npm', ['install'], {
       cwd: this.templatePath,
     });
     console.log(chalk.green('Successfully Installed Dependencies'));
   }
 
-  protected async cloneRepository() {
+  protected async copyTemplate() {
     const outDir = this.getRc((rc) => rc?.outDir);
-    const templateRepository = this.getRc((rc) => rc?.template?.repository);
-    const branchName = this.getRc((rc) => rc?.template?.branch);
+    const templateName = this.getRc((rc) => rc?.template?.name);
 
-    let extraOptions = [];
-    if (branchName) {
-      extraOptions = ['-b', branchName];
-    }
+    const fullTemplatePath = join(__dirname, 'themes', templateName);
 
-    return await this.spawnAndWaitAndStopIfError('git', [
-      'clone',
-      templateRepository,
+    await copyAllFilesFromOneDirectoryToAnother(
+      fullTemplatePath,
       outDir,
-      ...extraOptions,
-    ]);
+      () => true,
+    );
   }
 
   protected isFirstRun(templatePath: string) {
