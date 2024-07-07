@@ -1,0 +1,53 @@
+version: 2.1
+
+orbs:
+  node: circleci/node@5.1.0
+
+workflows:
+  build:
+    jobs:
+      - build-only
+  publish:
+    jobs:
+      - deploy:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+
+jobs:
+  build-only:
+    docker:
+      - image: 'cimg/base:stable'
+    steps:
+      - checkout
+      - node/install:
+          node-version: '16.13'
+      - run: npm install
+      - run: node --version
+      - run:
+          command: npm run build
+          name: Build it
+      - persist_to_workspace:
+          root: ~/project
+          paths: .
+
+  deploy:
+    docker:
+      - image: 'cimg/base:stable'
+    steps:
+      - checkout
+      - node/install:
+          node-version: '16.13'
+      - run: npm install
+      - run: node --version
+      - run:
+          command: npm run build
+          name: Build it
+      - run:
+          name: Authenticate with registry
+          command: echo "//registry.npmjs.org/:_authToken=$npm_TOKEN" > ~/.npmrc
+      - run:
+          name: Publish package
+          command: npm publish

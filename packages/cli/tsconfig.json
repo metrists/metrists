@@ -1,0 +1,55 @@
+{
+  "compilerOptions": {
+    "outDir": "dist",
+    "declaration": true,
+    "lib": [
+      "es2017"
+    ],
+    "module": "commonjs",
+    "target": "es6",
+    "skipLibCheck": true,
+    "sourceMap": false,
+    "strict": false,
+    "useUnknownInCatchVariables": false,
+    "types": [
+      "node"
+    ],
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@lib/*": [
+        "./lib/*"
+      ],
+      "@utils/*": [
+        "./lib/utils/*"
+      ],
+      "@interfaces/*": [
+        "./interfaces/*"
+      ],
+      "@commands/*": [
+        "./commands/*"
+      ],
+      "@exceptions/*": [
+        "./exceptions/*"
+      ],
+      "@constants/*": [
+        "./constants/*"
+      ],
+      "@ui/*": [
+        "./lib/ui/*"
+      ],
+      "@ui": [
+        "./lib/ui/index"
+      ],
+    }
+  },
+  "exclude": [
+    "dist",
+    "e2e",
+    ".git",
+    ".circleci",
+    ".eslint.json",
+    ".prettierrc",
+    "nodemon.json"
+  ]
+}

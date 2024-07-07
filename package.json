@@ -1,0 +1,13 @@
+{
+  "name": "metrists-monorepo",
+  "private": true,
+  "workspaces": [
+    "./packages/cli",
+    "./themes/*"
+  ],
+  "scripts": {
+    "build": "npm run build:cli && npm run sync-themes",
+    "build:cli": "cd packages/cli && npm install && npm run build",
+    "sync-themes": "rsync -av --delete --exclude-from=.rsync-exclude packages/themes/ packages/cli/dist/themes/"
+  }
+}
