@@ -37,7 +37,6 @@ export class InitCommand extends ConfigAwareCommand {
     const outDir = this.getRc((rc) => rc?.outDir);
     this.workingDirectory = process.cwd();
     this.templatePath = join(this.workingDirectory, outDir);
-
     const isFirstRun = this.isFirstRun(this.templatePath);
 
     const initialSetupPromises: Promise<any>[] = [
@@ -134,15 +133,16 @@ export class InitCommand extends ConfigAwareCommand {
   }
 
   protected async copyTemplate() {
-    const outDir = this.getRc((rc) => rc?.outDir);
     const templateName = this.getRc((rc) => rc?.template?.name);
-
-    const fullTemplatePath = join(__dirname, 'themes', templateName);
-
+    console.log(__dirname, templateName, 'we are here');
+    const fullTemplatePath = join(__dirname, '..', 'themes', templateName);
+    if (!pathExists(this.templatePath)) {
+      await createDirectory(this.templatePath);
+    }
     await copyAllFilesFromOneDirectoryToAnother(
       fullTemplatePath,
-      outDir,
-      () => true,
+      this.templatePath,
+      (path) => !path.includes('.contentlayer'),
     );
   }
 
