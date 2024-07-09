@@ -14,7 +14,7 @@ export const RC_FILE_NAME = '.metristsrc';
 export const DEFAULT_RC_FILE: IRcFileComplete = {
   outDir: '.metrists',
   template: {
-    name: 'metrists-theme-default',
+    name: 'metrists-theme-next',
   },
 };
 
