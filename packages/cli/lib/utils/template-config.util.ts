@@ -1,12 +1,12 @@
 import { readFileInJsonIfExists } from './fs.util';
 
 export interface ITemplateConfig {
-  'contentPath': string;
-  'assetsPath': string;
-  'watchScript': string;
-  'buildScript': string;
-  'watchContentScript': string;
-  'buildContentScript': string;
+  contentPath: string;
+  assetsPath: string;
+  watchScript: string;
+  buildScript: string;
+  watchContentScript?: string;
+  buildContentScript?: string;
 }
 
 export const TEMPLATE_CONFIG_FILE_NAME = 'metrists.json';

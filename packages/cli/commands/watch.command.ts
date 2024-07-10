@@ -73,10 +73,13 @@ export class WatchCommand extends InitCommand {
   protected async startContentLayer() {
     const contentWatchScript = this.getTemplateConfig(
       (rc) => rc?.watchContentScript,
-    ).split(' ');
-    return spawnAndWait(contentWatchScript[0], contentWatchScript.slice(1), {
-      cwd: this.templatePath,
-    });
+    );
+    if (contentWatchScript) {
+      const contentWatchScriptParts = contentWatchScript.split(' ');
+      return spawnAndWait(contentWatchScriptParts[0], contentWatchScriptParts.slice(1), {
+        cwd: this.templatePath,
+      });
+    }
   }
 
   protected watchFiles() {

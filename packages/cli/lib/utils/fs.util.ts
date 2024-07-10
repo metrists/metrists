@@ -2,13 +2,13 @@ import { join, resolve } from 'path';
 import {
   readFile as readFileFs,
   readdir,
-  copyFile as copyFileFs,
+  cp as copyFileFs,
   mkdir,
   unlink,
   appendFile,
   writeFile,
 } from 'fs/promises';
-import { existsSync, rmSync } from 'fs';
+import { CopyOptions, existsSync, rmSync } from 'fs';
 import { EOL } from 'os';
 
 export async function readFile(...paths: string[]) {
@@ -16,12 +16,16 @@ export async function readFile(...paths: string[]) {
   return await readFileFs(finalPath, { encoding: 'utf8' });
 }
 
-export async function readFileInJson<TData = any>(...params: Parameters<typeof readFile>) {
+export async function readFileInJson<TData = any>(
+  ...params: Parameters<typeof readFile>
+) {
   const fileContent = await readFile(...params);
   return JSON.parse(fileContent) as TData;
 }
 
-export async function readFileInJsonIfExists<TData = any>(...params: Parameters<typeof readFile>) {
+export async function readFileInJsonIfExists<TData = any>(
+  ...params: Parameters<typeof readFile>
+) {
   const finalPath = combinePaths(params);
   if (existsSync(finalPath)) {
     return await readFileInJson<TData>(...params);
@@ -43,7 +47,10 @@ export async function readFileIfExists<TData = any>(...paths: string[]) {
   return null;
 }
 
-export async function appendToFile(filePath: string, data: string | string[] | Buffer) {
+export async function appendToFile(
+  filePath: string,
+  data: string | string[] | Buffer,
+) {
   if (Array.isArray(data)) {
     return await appendFile(filePath, data.join(EOL));
   } else {
@@ -51,7 +58,10 @@ export async function appendToFile(filePath: string, data: string | string[] | B
   }
 }
 
-export async function writeToFile(filePath: string, date: string | string[] | Buffer) {
+export async function writeToFile(
+  filePath: string,
+  date: string | string[] | Buffer,
+) {
   if (Array.isArray(date)) {
     return await writeFile(filePath, date.join(EOL));
   } else {
@@ -60,7 +70,10 @@ export async function writeToFile(filePath: string, date: string | string[] | Bu
 }
 
 export function combinePaths(paths: string[]) {
-  return paths.reduce((finalPath, currentPortion) => join(finalPath, currentPortion), '');
+  return paths.reduce(
+    (finalPath, currentPortion) => join(finalPath, currentPortion),
+    '',
+  );
 }
 
 export async function* getContentsRecursively(dir: string) {
@@ -86,7 +99,7 @@ export function copyAllFilesFromOneDirectoryToAnother(
     async (file) => {
       const relativePath = file.replace(directoryToLookAt, '');
       const outputPath = join(outputDirectory, relativePath);
-      allFilesPromises.push(copyFile(file, outputPath));
+      allFilesPromises.push(copyFile(file, outputPath, { recursive: true }));
     },
     shouldInclude,
   );
@@ -123,13 +136,19 @@ export async function deleteDirectory(directoryPath: string) {
   return await rmSync(directoryPath, { recursive: true, force: true });
 }
 
-export async function createFile(filePath: string, fileContent?: string | Buffer) {
+export async function createFile(
+  filePath: string,
+  fileContent?: string | Buffer,
+) {
   return await appendFile(filePath, fileContent ?? '');
 }
 
-export async function createFileIfNotExists(filePath: string, fileContent?: string | Buffer) {
+export async function createFileIfNotExists(
+  filePath: string,
+  fileContent?: string | Buffer,
+) {
   if (!pathExists(filePath)) {
-    return await createFile(filePath , fileContent);
+    return await createFile(filePath, fileContent);
   }
 }
 
@@ -138,8 +157,12 @@ export function pathExists(...path: string[]) {
   return existsSync(finalPath);
 }
 
-export async function copyFile(fromPath: string, toPath: string) {
-  return await copyFileFs(fromPath, toPath);
+export async function copyFile(
+  fromPath: string,
+  toPath: string,
+  options?: CopyOptions,
+) {
+  return await copyFileFs(fromPath, toPath, options);
 }
 
 export async function deleteFile(path: string) {

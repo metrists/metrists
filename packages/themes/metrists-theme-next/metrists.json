@@ -1,0 +1,6 @@
+{
+  "contentPath": "content",
+  "assetsPath": "public",
+  "watchScript": "npm run dev",
+  "buildScript": "npm run build"
+}

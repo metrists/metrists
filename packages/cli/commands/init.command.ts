@@ -50,7 +50,6 @@ export class InitCommand extends ConfigAwareCommand {
     await Promise.all(initialSetupPromises);
 
     await this.loadTemplateConfig();
-
     const templateContentRelativePath = this.getTemplateConfig(
       (rc) => rc?.contentPath,
     );
@@ -134,7 +133,6 @@ export class InitCommand extends ConfigAwareCommand {
 
   protected async copyTemplate() {
     const templateName = this.getRc((rc) => rc?.template?.name);
-    console.log(__dirname, templateName, 'we are here');
     const fullTemplatePath = join(__dirname, '..', 'themes', templateName);
     if (!pathExists(this.templatePath)) {
       await createDirectory(this.templatePath);
@@ -142,7 +140,7 @@ export class InitCommand extends ConfigAwareCommand {
     await copyAllFilesFromOneDirectoryToAnother(
       fullTemplatePath,
       this.templatePath,
-      (path) => !path.includes('.contentlayer'),
+      (path) => !path.includes('.contentlayer') && !path.includes('.git') && !path.includes('.next'),
     );
   }
 
