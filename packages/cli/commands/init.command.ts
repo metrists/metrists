@@ -125,9 +125,13 @@ export class InitCommand extends ConfigAwareCommand {
   protected async copyAndInstallTemplate() {
     await this.copyTemplate();
     console.log(chalk.green('Successfully Added Template'));
-    await this.spawnAndWaitAndStopIfError('npm', ['install'], {
-      cwd: this.templatePath,
-    });
+    await this.spawnAndWaitAndStopIfError(
+      'npm',
+      ['install', '--legacy-peer-deps'],
+      {
+        cwd: this.templatePath,
+      },
+    );
     console.log(chalk.green('Successfully Installed Dependencies'));
   }
 
@@ -140,7 +144,10 @@ export class InitCommand extends ConfigAwareCommand {
     await copyAllFilesFromOneDirectoryToAnother(
       fullTemplatePath,
       this.templatePath,
-      (path) => !path.includes('.contentlayer') && !path.includes('.git') && !path.includes('.next'),
+      (path) =>
+        !path.includes('.contentlayer') &&
+        !path.includes('.git') &&
+        !path.includes('.next'),
     );
   }
 

@@ -1,0 +1,114 @@
+.reader h1 {
+  margin-top: 0.5rem;
+  font-size: 2.25rem;
+  font-weight: bold;
+  letter-spacing: -0.025em;
+}
+
+.reader h2 {
+  margin-top: 2rem;
+  border-bottom-width: 1px;
+  padding-bottom: 0.25rem;
+  font-size: 1.875rem;
+  font-weight: 600;
+}
+
+.reader h3 {
+  margin-top: 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.reader h4 {
+  margin-top: 1.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.reader h5 {
+  margin-top: 1.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.reader h6 {
+  margin-top: 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.reader a {
+  max-width: 100%;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
+.reader p {
+  line-height: 1.75rem;
+}
+
+.reader ul {
+  margin-top: 1.5rem;
+  margin-left: 1.5rem;
+  list-style-type: disc;
+}
+
+.reader ol {
+  margin-top: 1.5rem;
+  margin-left: 1.5rem;
+  list-style-type: decimal;
+}
+
+.reader li {
+  margin-top: 0.5rem;
+}
+
+.reader blockquote {
+  margin-top: 1rem;
+  border-left-width: 2px;
+  padding-left: 1.5rem;
+  font-style: italic;
+}
+
+.reader img {
+  border-radius: 0.375rem;
+  border-width: 1px;
+}
+
+.reader hr {
+  margin-top: 1rem;
+  margin-bottom: 2rem;
+}
+
+.reader table {
+  margin-top: 1.5rem;
+  width: 100%;
+  overflow-y: auto;
+}
+
+.reader tr {
+  margin: 0;
+  border-top-width: 1px;
+  padding: 0;
+}
+
+.reader th {
+  border-width: 1px;
+  padding: 1rem;
+  text-align: left;
+  font-weight: bold;
+}
+
+.reader td {
+  border-width: 1px;
+  padding: 1rem;
+  text-align: left;
+}
+
+.reader pre {
+  margin-bottom: 1rem;
+  margin-top: 1rem;
+  overflow-x: auto;
+  padding: 1rem;
+}

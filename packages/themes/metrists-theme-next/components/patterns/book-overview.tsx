@@ -1,28 +1,22 @@
 import { MouseEventHandler, useMemo, type ReactNode } from "react";
-import Link, { LinkProps } from "next/link";
-import { Button, ButtonProps } from "~/components/ui/button";
+import Link, { type LinkProps } from "next/link";
+import { Button, ButtonProps } from "@/components/ui/button";
 import { TwoToneImage, TwoToneImageProps } from "./two-tone-image";
-import { cn } from "~/utils";
+import { cn } from "@/lib/utils";
 
-export type BookOverviewActionProps =
+export type BookOverviewActionProps = {
+  label: ReactNode;
+  buttonProps: Partial<ButtonProps>;
+} & (
   | {
       action: string;
       linkProps?: Partial<LinkProps>;
-      buttonProps: Partial<ButtonProps>;
-      label: ReactNode;
-    }
-  | {
-      action: React.ReactNode;
-      linkProps?: undefined;
-      label?: undefined;
-      buttonProps?: undefined;
     }
   | {
       linkProps?: undefined;
-      buttonProps: Partial<ButtonProps>;
       action: MouseEventHandler<HTMLButtonElement>;
-      label: ReactNode;
-    };
+    }
+);
 
 export interface BookOverviewProps {
   title: string;
@@ -99,12 +93,10 @@ export function BookOverview({
               >
                 <Button {...buttonProps}>{label}</Button>
               </Link>
-            ) : typeof action === "object" ? (
-              action
             ) : (
               <Button
                 key={`book-overview-action-${index}`}
-                onClick={action as MouseEventHandler<HTMLButtonElement>}
+                onClick={action}
                 {...buttonProps}
               >
                 {label}

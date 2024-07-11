@@ -5,8 +5,14 @@ import {
   ToastProvider,
   ToastTitle,
   ToastViewport,
-} from "~/components/ui/toast";
-import { useToast } from "~/utils/hooks/use-toast";
+} from "@/components/ui/toast";
+import { cn, useToast } from "@/lib/utils";
+import { Inter as FontSans } from "next/font/google";
+
+const fontSans = FontSans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
 
 export function Toaster() {
   const { toasts } = useToast();
@@ -16,7 +22,7 @@ export function Toaster() {
       {toasts.map(function ({ id, title, description, action, ...props }) {
         return (
           <Toast key={id} {...props}>
-            <div className="grid gap-1">
+            <div className={cn("grid gap-1", fontSans.className)}>
               {title && <ToastTitle>{title}</ToastTitle>}
               {description && (
                 <ToastDescription>{description}</ToastDescription>

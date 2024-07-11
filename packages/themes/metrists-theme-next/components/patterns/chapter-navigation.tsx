@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { ChevronRightIcon, ChevronLeftIcon } from "lucide-react";
-import { Button, ButtonProps } from "~/components/ui/button";
+import { Button, ButtonProps } from "@/components/ui/button";
 import { ConditionallyWrap } from "./conditionally-wrap";
-import type { ChapterNavigation } from "~/utils/chapter-navigation";
+import type { ChapterNavigation } from "@/lib/utils";
+
 export interface ChapterNavigationProps {
   navigation: ChapterNavigation;
   buttonProps?: Partial<ButtonProps>;

@@ -1,10 +1,15 @@
-"use client"
 import Link from "next/link";
 import { ListIcon } from "lucide-react";
-import { Button } from "~/components/ui/button";
-import { Drawer, DrawerContent, DrawerTrigger } from "@components/ui/drawer";
+import { Button } from "@/components/ui/button";
+import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 import type { Chapter } from ".contentlayer/generated";
-import type { ChapterLike } from "~/utils/chapter-navigation";
+import type { ChapterLike } from "@/lib/utils";
+import { Inter as FontSans } from "next/font/google";
+
+const fontSans = FontSans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
 
 export interface ChapterNavigationProps {
   currentChapter: ChapterLike | undefined;
@@ -33,7 +38,7 @@ export function MobileChapterDrawer({
           <ListIcon size="16" />
         </Button>
       </DrawerTrigger>
-      <DrawerContent>
+      <DrawerContent className={fontSans.className}>
         <div className="p-4">
           <ul>
             {chapters.map((chapter) => (

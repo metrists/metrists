@@ -1,4 +1,5 @@
 import type { Markdown } from "contentlayer/core";
+import styles from "./reader.module.css";
 
 export type ReaderProps = {
   markdown: Markdown;
@@ -7,7 +8,7 @@ export type ReaderProps = {
 export function Reader({ markdown }: ReaderProps) {
   return (
     <div
-      className="reader"
+      className={styles.reader}
       dangerouslySetInnerHTML={{
         __html: markdown.html,
       }}

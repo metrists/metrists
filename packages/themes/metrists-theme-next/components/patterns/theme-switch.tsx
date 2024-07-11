@@ -1,43 +1,34 @@
-import { SunMediumIcon, MoonIcon, SettingsIcon } from "lucide-react";
-import { type Theme } from "~/utils/theme.server";
+import { Button } from "@/components/ui/button";
+import { useTheme } from "next-themes";
+import { SunIcon, MoonIcon, SunMoonIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+export function ThemeSwitch() {
+  const { systemTheme, theme, setTheme } = useTheme();
+  const currentTheme = theme === "system" ? systemTheme : theme;
+  const [mounted, setMounted] = useState(false); // State to track component mount status
 
-export function ThemeSwitch({
-  userPreference,
-}: {
-  userPreference?: Theme | null;
-}) {
-  // const fetcher = useFetcher();
-  // const [form] = useForm({
-  //   id: "theme-switch",
-  //   // @ts-expect-error testing things out for now
-  //   lastSubmission: fetcher.data?.submission,
-  //   onValidate({ formData }) {
-  //     return parse(formData, { schema });
-  //   },
-  // });
-  // const optimisticMode = useOptimisticThemeMode();
-  // const mode = optimisticMode ?? userPreference ?? "system";
-  // const nextMode =
-  //   mode === "system" ? "light" : mode === "light" ? "dark" : "system";
-  // const modeLabel = {
-  //   light: <SunMediumIcon />,
-  //   dark: <MoonIcon />,
-  //   system: <SettingsIcon />,
-  // };
-  // return (
-  //   <fetcher.Form method="POST" action="/preferences/theme" {...form.props}>
-  //     <input type="hidden" name="theme" value={nextMode} />
-  //     <div className="flex gap-2">
-  //       <button
-  //         name="intent"
-  //         value="update-theme"
-  //            type="submit"
-  //         className="flex items-center justify-center w-8 h-8 cursor-pointer"
-  //       >
-  //         {modeLabel[mode as Theme]}
-  //       </button>
-  //     </div>
-  //     <ErrorList errors={form.errors} id={form.errorId} />
-  //   </fetcher.Form>
-  // );
+  useEffect(() => {
+    setMounted(true); // Set mounted to true after first render (client-side)
+  }, []);
+
+  return (
+    <Button
+      variant="secondary"
+      className="rounded-lg py-6 px-4"
+      size="lg"
+      onClick={() => (theme == "dark" ? setTheme("light") : setTheme("dark"))}
+    >
+      {mounted ? (
+        currentTheme === "system" ? (
+          <SunMoonIcon size="16" />
+        ) : currentTheme === "light" ? (
+          <SunIcon size="16" />
+        ) : (
+          <MoonIcon size="16" />
+        )
+      ) : (
+        ""
+      )}
+    </Button>
+  );
 }
