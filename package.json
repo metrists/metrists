@@ -9,6 +9,7 @@
     "build": "npm run build:cli && npm run sync-themes",
     "build:cli": "cd packages/cli && npm install && npm run build",
     "dev:build": "cd packages/cli && npm install && npm run dev:build",
-    "sync-themes": "rsync -av --delete --exclude-from=.rsync-exclude packages/themes/ packages/cli/dist/themes/"
+    "sync-themes": "rsync -av --delete --exclude-from=.rsync-exclude packages/themes/ packages/cli/dist/themes/",
+    "publish:patch": "npm run build && cat README.md > ./packages/cli/README.md && cd packages/cli && npm version patch && npm publish --access public"
   }
 }
