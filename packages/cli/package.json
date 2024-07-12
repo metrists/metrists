@@ -1,6 +1,6 @@
 {
   "name": "metrists",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "metrists - publish markdown files as a book",
   "publishConfig": {
     "access": "public"
