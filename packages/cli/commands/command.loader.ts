@@ -5,13 +5,15 @@ import { WatchCommand } from './watch.command';
 import { InitCommand } from './init.command';
 import { PublishCommand } from './publish.command';
 import type { Command } from 'commander';
+import { BuildCommand } from './build.command';
 
 export class CommandLoader {
   public static load(program: Command): void {
-    program.showSuggestionAfterError()
+    program.showSuggestionAfterError();
     this.loadCommandAndAction(new WatchCommand(), program);
     this.loadCommandAndAction(new InitCommand(), program);
     this.loadCommandAndAction(new PublishCommand(), program);
+    this.loadCommandAndAction(new BuildCommand(), program);
     this.handleInvalidCommand(program);
   }
 
