@@ -25,8 +25,8 @@ export class PublishCommand extends InitCommand {
   }
 
   protected async createHostingConfig(hostingPlatform) {
-    const outDir = this.getRc((rc) => rc?.outDir);
-    const command = `npx ${name} build`;
+    const outDir = 'dist';
+    const command = `npx ${name} build -o ${outDir}`;
 
     const hostHelper = getHostHelper(hostingPlatform);
     if (!hostHelper) {
