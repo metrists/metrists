@@ -73,6 +73,7 @@ export class InitCommand extends ConfigAwareCommand {
       createGitIGnoreAndCopyFilesPromise.concat(
         this.copyAssetsAndContentFilesToTemplate(),
       );
+      createGitIGnoreAndCopyFilesPromise.push(this.initializeTemplate());
     }
 
     await Promise.all(createGitIGnoreAndCopyFilesPromise);
@@ -149,6 +150,21 @@ export class InitCommand extends ConfigAwareCommand {
         !path.includes('.git') &&
         !path.includes('.next'),
     );
+  }
+
+  protected async initializeTemplate() {
+    const templateInitCommand = this.getTemplateConfig((rc) => rc?.initScript);
+    if (templateInitCommand) {
+      const initCommandParts = templateInitCommand.split(' ');
+      return this.spawnAndWaitAndStopIfError(
+        initCommandParts[0],
+        initCommandParts.slice(1),
+        {
+          cwd: this.templatePath,
+        },
+      );
+    }
+    return Promise.resolve();
   }
 
   protected isFirstRun(templatePath: string) {

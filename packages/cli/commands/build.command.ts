@@ -1,5 +1,9 @@
 import { InitCommand } from './init.command';
 import { spawnAndWait } from '../lib/utils/process.util';
+import {
+  copyAllFilesFromOneDirectoryToAnother,
+  combinePaths,
+} from '../lib/utils/fs.util';
 import type { Command } from 'commander';
 
 export class BuildCommand extends InitCommand {
@@ -19,7 +23,9 @@ export class BuildCommand extends InitCommand {
       throw new Error('Output directory is required');
     }
 
-    await this.buildContentLayer().then(this.buildTemplate.bind(this));
+    await this.buildContentLayer()
+      .then(this.buildTemplate.bind(this))
+      .then(() => this.copyBuiltContentToOutputDir(outputDirRelative));
   }
 
   protected async buildTemplate() {
@@ -29,6 +35,19 @@ export class BuildCommand extends InitCommand {
     return spawnAndWait(buildScript[0], buildScript.slice(1), {
       cwd: this.templatePath,
     });
+  }
+
+  protected async copyBuiltContentToOutputDir(finalOutDir: string) {
+    const templateOutputDir = this.getTemplateConfig((rc) => rc);
+    const templateOutFullPath = combinePaths([
+      this.templatePath,
+      templateOutputDir.outDir,
+    ]);
+    return await copyAllFilesFromOneDirectoryToAnother(
+      templateOutFullPath,
+      finalOutDir,
+      () => true,
+    );
   }
 
   protected async buildContentLayer() {

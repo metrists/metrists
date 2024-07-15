@@ -2,5 +2,7 @@
   "contentPath": "content",
   "assetsPath": "public",
   "watchScript": "npm run dev",
-  "buildScript": "npm run build"
+  "buildScript": "npm run build",
+  "outDir": "out",
+  "initScript": "npm run build:content"
 }
