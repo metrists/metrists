@@ -9,7 +9,7 @@ interface Host {
   }) => string;
 }
 
-type SupportedHosts = 'netlify' | 'vercel' | 'cloudflare';
+type SupportedHosts = 'netlify' | 'vercel';
 
 export const hostHelpers: Record<SupportedHosts, Host> = {
   netlify: {
@@ -26,12 +26,6 @@ command = "${command}"
         'buildCommand': command,
         'outputDirectory': outDir,
       }),
-  },
-  cloudflare: {
-    configFileName: 'wrangler.toml',
-    getConfigFileContent: ({ outDir, command }) => `[build]  
-command = "${command}"
-`,
   },
 };
 
