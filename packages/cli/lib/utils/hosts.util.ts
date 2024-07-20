@@ -9,7 +9,7 @@ interface Host {
   }) => string;
 }
 
-type SupportedHosts = 'netlify' | 'vercel';
+type SupportedHosts = 'netlify' | 'vercel' | 'nixpacks';
 
 export const hostHelpers: Record<SupportedHosts, Host> = {
   netlify: {
@@ -26,6 +26,18 @@ command = "${command}"
         'buildCommand': command,
         'outputDirectory': outDir,
       }),
+  },
+  nixpacks: {
+    configFileName: 'nixpacks.toml',
+    getConfigFileContent: ({ outDir, command }) => `providers = ['node']
+
+[phases.build]
+cmds = ['${command}']
+
+[start]
+cmd = 'cd ${outDir} && npx serve -s'
+
+`,
   },
 };
 
