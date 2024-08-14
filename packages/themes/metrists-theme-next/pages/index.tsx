@@ -1,18 +1,19 @@
 import { Header } from "@/components/patterns/header";
 import { Sidebar } from "@/components/patterns/sidebar";
 import { allMeta, allChapters } from "contentlayer/generated";
-import { getChapterNavigation, useShare } from "@/lib/utils";
+import { getChapterNavigation, getCoverPath, useShare } from "@/lib/utils";
 import { BookOverview } from "@/components/patterns/book-overview";
 import { Reader } from "@/components/patterns/reader";
 import { Share } from "lucide-react";
 
-export function getStaticProps() {
+export async function getStaticProps() {
   const navigation = getChapterNavigation(undefined, allChapters);
   return {
     props: {
       meta: allMeta[0],
       chapters: allChapters,
       navigation,
+      coverPath: await getCoverPath(),
     },
   };
 }
@@ -21,16 +22,17 @@ export default function Home({
   meta,
   chapters,
   navigation,
-}: ReturnType<typeof getStaticProps>["props"]) {
+  coverPath,
+}: Awaited<ReturnType<typeof getStaticProps>>["props"]) {
   const shareMeta = useShare(meta);
   const firstChapter = chapters[0];
 
   return (
-    <Header meta={meta}>
+    <Header meta={meta} coverPath={coverPath}>
       <Sidebar meta={meta} chapters={chapters} navigation={navigation}>
         <BookOverview
           title={meta.title}
-          cover="/default-cover.svg"
+          cover={coverPath}
           authors={meta.authors}
           actions={[
             ...(firstChapter

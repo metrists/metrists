@@ -6,8 +6,10 @@ import type { Meta } from "contentlayer/generated";
 export function Header({
   meta,
   children,
+  coverPath,
 }: {
   meta: Meta;
+  coverPath: string;
   children: React.ReactNode;
 }) {
   return (
@@ -17,7 +19,7 @@ export function Header({
           <div className="flex items-center">
             <Link href="/" title={`${meta.title} Cover`}>
               <img
-                src="/default-cover.svg"
+                src={coverPath}
                 alt={meta.title}
                 className="aspect-square w-12 h-12 object-cover rounded-md"
               />

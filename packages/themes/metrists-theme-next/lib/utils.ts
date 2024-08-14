@@ -1,6 +1,9 @@
 import { type ClassValue, clsx } from "clsx";
 import { ChapterNavigationProps } from "@/components/patterns/chapter-navigation";
+import { readdir } from "fs/promises";
+import { join } from "path";
 import { twMerge } from "tailwind-merge";
+import { coverPath, acceptedCoverFormats, defaultCoverPath } from "@/constants";
 import type { Meta } from ".contentlayer/generated";
 import type { Chapter } from ".contentlayer/generated";
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
@@ -345,3 +348,19 @@ function useToast() {
 }
 
 export { useToast, toast };
+
+export async function getCoverPath() {
+  const files = await readdir(join(process.cwd(), "public"));
+  const coverFile = files.find((file) => {
+    const fileNameWithoutPath = file.split("/").pop();
+    if (!fileNameWithoutPath) return null;
+    const fileNameWithoutExtension = fileNameWithoutPath.split(".").shift();
+    const fileExtension = fileNameWithoutPath.split(".").pop();
+    if (!fileExtension) return null;
+    return (
+      fileNameWithoutExtension === coverPath &&
+      acceptedCoverFormats.includes(fileExtension)
+    );
+  });
+  return coverFile ?? defaultCoverPath;
+}

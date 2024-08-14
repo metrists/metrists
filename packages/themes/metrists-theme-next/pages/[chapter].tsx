@@ -1,7 +1,12 @@
 import { Header } from "@/components/patterns/header";
 import { Sidebar } from "@/components/patterns/sidebar";
 import { allMeta, allChapters } from "contentlayer/generated";
-import { getChapterNavigation, invariant, useShare } from "@/lib/utils";
+import {
+  getChapterNavigation,
+  getCoverPath,
+  invariant,
+  useShare,
+} from "@/lib/utils";
 import { Reader } from "@/components/patterns/reader";
 
 export function getStaticPaths() {
@@ -12,7 +17,7 @@ export function getStaticPaths() {
   return { paths, fallback: false };
 }
 
-export function getStaticProps({
+export async function getStaticProps({
   params,
 }: ReturnType<typeof getStaticPaths>["paths"][0]) {
   const chapter = allChapters.find(
@@ -26,6 +31,7 @@ export function getStaticProps({
       chapters: allChapters,
       navigation,
       chapter,
+      coverPath: await getCoverPath(),
     },
   };
 }
@@ -35,11 +41,12 @@ export default function Index({
   chapters,
   navigation,
   chapter,
-}: ReturnType<typeof getStaticProps>["props"]) {
+  coverPath,
+}: Awaited<ReturnType<typeof getStaticProps>>["props"]) {
   const shareMeta = useShare(meta);
 
   return (
-    <Header meta={meta}>
+    <Header meta={meta} coverPath={coverPath}>
       <Sidebar meta={meta} chapters={chapters} navigation={navigation}>
         <div className="my-4">
           <Reader markdown={chapter.body} />

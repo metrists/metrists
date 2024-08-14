@@ -31,7 +31,7 @@ export class WatchCommand extends InitCommand {
     await Promise.all([
       this.startDevServer(),
       this.watchFiles(),
-      this.startContentLayer(),
+      this.startTemplateWatchCommand(),
     ]);
   }
 
@@ -70,15 +70,19 @@ export class WatchCommand extends InitCommand {
     );
   }
 
-  protected async startContentLayer() {
+  protected async startTemplateWatchCommand() {
     const contentWatchScript = this.getTemplateConfig(
       (rc) => rc?.watchContentScript,
     );
     if (contentWatchScript) {
       const contentWatchScriptParts = contentWatchScript.split(' ');
-      return spawnAndWait(contentWatchScriptParts[0], contentWatchScriptParts.slice(1), {
-        cwd: this.templatePath,
-      });
+      return spawnAndWait(
+        contentWatchScriptParts[0],
+        contentWatchScriptParts.slice(1),
+        {
+          cwd: this.templatePath,
+        },
+      );
     }
   }
 
