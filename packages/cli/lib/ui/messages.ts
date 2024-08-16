@@ -2,7 +2,9 @@ import { EMOJIS } from './emojis';
 
 export const MESSAGES = {
   NO_ID_PASSED: `No id passed ${EMOJIS.EYES}`,
-  COULD_NOT_FIND_FETCHER: 'Could not find the fetcher file: [file_path]',
+  UNSUPPORTED_HOST:
+    'Host [host] is not supported. Supported hosts: [supportedHosts]',
+  HOST_NOT_PROVIDED: 'No host provided. Supported hosts: [supportedHosts]',
   COULD_NOT_PARSE_FETCHER: 'Could not parse the output of your fetcher file.',
   COULD_NOT_CREATE_FILE: `Could not create file [path]. [error]`,
   ENTITIES_CREATED: `${EMOJIS.CHECK}  Basic entities created successfully.`,

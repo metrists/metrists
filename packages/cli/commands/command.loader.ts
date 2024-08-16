@@ -6,6 +6,7 @@ import { InitCommand } from './init.command';
 import { PublishCommand } from './publish.command';
 import type { Command } from 'commander';
 import { BuildCommand } from './build.command';
+import { BaseException } from '../exceptions/base.exception';
 
 export class CommandLoader {
   public static load(program: Command): void {
@@ -36,7 +37,15 @@ export class CommandLoader {
   ) {
     const commanderCommand = command.load(program);
     commanderCommand.action(async () => {
-      return await command.handle(commanderCommand);
+      try {
+        return await command.handle(commanderCommand);
+      } catch (error: any) {
+        if (error instanceof BaseException) {
+          console.error(`${ERROR_PREFIX} ${chalk.red(error.getMessage())}`);
+          process.exit(1);
+        }
+        throw error;
+      }
     });
     return commanderCommand;
   }
