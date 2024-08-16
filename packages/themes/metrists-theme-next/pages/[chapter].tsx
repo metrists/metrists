@@ -1,7 +1,9 @@
+import Head from "next/head";
 import { Header } from "@/components/patterns/header";
 import { Sidebar } from "@/components/patterns/sidebar";
 import { allMeta, allChapters } from "contentlayer/generated";
 import {
+  getChapterMetadata,
   getChapterNavigation,
   getCoverPath,
   invariant,
@@ -25,6 +27,7 @@ export async function getStaticProps({
   );
   invariant(chapter, `Chapter not found for slug: ${params.chapter}`);
   const navigation = getChapterNavigation(chapter, allChapters);
+
   return {
     props: {
       meta: allMeta[0],
@@ -32,6 +35,7 @@ export async function getStaticProps({
       navigation,
       chapter,
       coverPath: await getCoverPath(),
+      metadata: getChapterMetadata(allMeta[0], chapter),
     },
   };
 }
@@ -42,16 +46,22 @@ export default function Index({
   navigation,
   chapter,
   coverPath,
+  metadata,
 }: Awaited<ReturnType<typeof getStaticProps>>["props"]) {
   const shareMeta = useShare(meta);
-
   return (
-    <Header meta={meta} coverPath={coverPath}>
-      <Sidebar meta={meta} chapters={chapters} navigation={navigation}>
-        <div className="my-4">
-          <Reader markdown={chapter.body} />
-        </div>
-      </Sidebar>
-    </Header>
+    <>
+      <Head>
+        <title>{metadata.title}</title>
+        <meta name="description" content={metadata.description} />
+      </Head>
+      <Header meta={meta} coverPath={coverPath}>
+        <Sidebar meta={meta} chapters={chapters} navigation={navigation}>
+          <div className="my-4">
+            <Reader markdown={chapter.body} />
+          </div>
+        </Sidebar>
+      </Header>
+    </>
   );
 }

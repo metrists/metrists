@@ -364,3 +364,17 @@ export async function getCoverPath() {
   });
   return coverFile ?? defaultCoverPath;
 }
+
+export function getGeneralMetadata(meta: Meta) {
+  return {
+    title: meta.title,
+    description: meta.body.raw.slice(0, 160), //TODO: strip markdown
+  };
+}
+
+export function getChapterMetadata(meta: Meta, chapter: Chapter) {
+  return {
+    title: `${meta.title} - ${chapter.title}`,
+    description: meta.body.raw.slice(0, 160), //TODO: strip markdown
+  };
+}
