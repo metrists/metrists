@@ -32,15 +32,14 @@
     "commander": "12.1.0",
     "js-yaml": "4.1.0",
     "node-emoji": "1.11.0",
-    "node-html-parser": "^6.1.11",
     "rimraf": "3.0.2",
-    "tsconfig-paths": "4.1.0",
     "zod": "3.23.0"
   },
   "devDependencies": {
     "@types/node": "^18.11.18",
     "@types/node-emoji": "1.8.2",
     "@types/os-name": "3.1.0",
+    "tsconfig-paths": "4.1.0",
     "@types/webpack-node-externals": "2.5.3",
     "@typescript-eslint/eslint-plugin": "5.38.1",
     "@typescript-eslint/parser": "5.38.1",
