@@ -4,9 +4,10 @@ import { AbstractCommand } from './abstract.command';
 import { WatchCommand } from './watch.command';
 import { InitCommand } from './init.command';
 import { PublishCommand } from './publish.command';
-import type { Command } from 'commander';
 import { BuildCommand } from './build.command';
+import { PruneCommand } from './prune.command';
 import { BaseException } from '../exceptions/base.exception';
+import type { Command } from 'commander';
 
 export class CommandLoader {
   public static load(program: Command): void {
@@ -15,6 +16,7 @@ export class CommandLoader {
     this.loadCommandAndAction(new InitCommand(), program);
     this.loadCommandAndAction(new PublishCommand(), program);
     this.loadCommandAndAction(new BuildCommand(), program);
+    this.loadCommandAndAction(new PruneCommand(), program);
     this.handleInvalidCommand(program);
   }
 
