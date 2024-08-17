@@ -6,7 +6,7 @@
     "access": "public"
   },
   "engines": {
-    "node": ">= 12.9.0"
+    "node": ">=18.17.0"
   },
   "bin": {
     "metrists": "./dist/bin/metrists.js"
