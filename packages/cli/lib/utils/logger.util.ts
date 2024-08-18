@@ -30,7 +30,7 @@ export class ConsoleLogger extends Logger {
     }
   }
 
-  info(messages: string) {
+  info(...messages: string[]) {
     this._log('info', ...messages);
   }
   warn(...messages: string[]) {
@@ -49,7 +49,7 @@ export class ConsoleLogger extends Logger {
     if (!types.some((type) => this.allowedTypes.includes(type))) {
       return;
     }
-    if (Array.isArray(messages)) {
+    if (messages?.length > 1) {
       console.log(
         ...messages.map((message) => logTypeToLogColour.default(message)),
       );
@@ -61,12 +61,12 @@ export class ConsoleLogger extends Logger {
     if (!this.allowedTypes.includes(type)) {
       return;
     }
-    if (Array.isArray(messages)) {
+    if (messages?.length > 1) {
       console.log(
         ...messages.map((message) => logTypeToLogColour[type](message)),
       );
     } else {
-      console.log(logTypeToLogColour[type](messages));
+      console.log(logTypeToLogColour[type](messages[0]));
     }
   }
 }
