@@ -32,9 +32,13 @@ export class BuildCommand extends InitCommand {
     const buildScript = this.getTemplateConfig((rc) => rc?.buildScript).split(
       ' ',
     );
-    return spawnAndWait(buildScript[0], buildScript.slice(1), {
-      cwd: this.templatePath,
-    });
+    return this.spawnAndWaitAndStopIfError(
+      buildScript[0],
+      buildScript.slice(1),
+      {
+        cwd: this.templatePath,
+      },
+    );
   }
 
   protected async copyBuiltContentToOutputDir(finalOutDir: string) {
@@ -57,7 +61,7 @@ export class BuildCommand extends InitCommand {
 
     if (buildContentScript) {
       const buildContentScriptParts = buildContentScript.split(' ');
-      return spawnAndWait(
+      return this.spawnAndWaitAndStopIfError(
         buildContentScriptParts[0],
         buildContentScriptParts.slice(1),
         {

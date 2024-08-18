@@ -22,9 +22,9 @@ export class PruneCommand extends ConfigAwareCommand {
 
     if (pathExists(templatePath)) {
       await deleteDirectory(templatePath);
-      console.log(chalk.green('Pruned the previous build'));
+      this.logger.info('Pruned the previous build');
     } else {
-      console.log(chalk.yellow('No previous build found to prune'));
+      this.logger.warn('No previous build found to prune');
     }
   }
 }

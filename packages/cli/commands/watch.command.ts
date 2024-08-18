@@ -43,13 +43,14 @@ export class WatchCommand extends InitCommand {
       ' ',
     );
     return spawnAndWait(
+      this.logger,
       watchScript[0],
       watchScript.slice(1),
       {
         cwd: this.templatePath,
       },
       {
-        stdOutListener: (data) => {
+        stdOutListener: (data, next) => {
           if (!serverStarted) {
             const matches = serverStartRegexes.map((regex) =>
               data.toString().match(regex),
@@ -60,11 +61,11 @@ export class WatchCommand extends InitCommand {
                 open(localUrl);
                 serverStarted = true;
               } catch (e) {
-                console.log(chalk.green(`Server started at ${localUrl}`));
+                this.logger.info(chalk.green(`Server started at ${localUrl}`));
               }
             }
           }
-          console.log(chalk.gray(data.toString()));
+          next(data);
         },
       },
     );
@@ -77,6 +78,7 @@ export class WatchCommand extends InitCommand {
     if (contentWatchScript) {
       const contentWatchScriptParts = contentWatchScript.split(' ');
       return spawnAndWait(
+        this.logger,
         contentWatchScriptParts[0],
         contentWatchScriptParts.slice(1),
         {
