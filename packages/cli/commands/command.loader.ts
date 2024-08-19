@@ -47,11 +47,14 @@ export class CommandLoader {
     program: Command,
   ) {
     const commanderCommand = command.load(program);
-    const services = {
-      logger: this.logger,
-    };
     commanderCommand.action(async () => {
       try {
+        const commandLogger = new ConsoleLogger(
+          this.getLogLevelsFromCommanderOptions(commanderCommand),
+        );
+        const services = {
+          logger: commandLogger,
+        };
         command.setServices(services);
         return await command.handle(commanderCommand);
       } catch (error: any) {
@@ -68,16 +71,12 @@ export class CommandLoader {
   protected static getLogLevelsFromCommanderOptions(
     commanderCommand: Command,
   ): LogTypes[] | null {
-    const logLevelOptions = ['verbose', 'noob'];
-    const logLevelOptionToLogLevels = {
-      'verbose': ['verbose', 'info', 'warn', 'error', 'noob'],
-      'noob': ['noob', 'info', 'error'],
-    };
+    const logLevelOptions: LogTypes[] = ['verbose', 'noob'];
 
-    const options = commanderCommand.opts();
-    const logLevel = logLevelOptions.find((option) => options[option]);
+    const options = commanderCommand.optsWithGlobals();
+    const logLevel = logLevelOptions.filter((option) => options[option]);
     if (logLevel) {
-      return logLevelOptionToLogLevels[logLevel];
+      return logLevel;
     }
   }
 }

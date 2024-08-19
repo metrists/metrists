@@ -28,6 +28,8 @@ const bootstrap = () => {
       '-v, --version',
       'Output the current version.',
     )
+    .option('--noob', 'Log only noob messages')
+    .option('--verbose', 'log all messages')
     .usage('<command> [options]')
     .helpOption('-h, --help', 'Output usage information.');
 

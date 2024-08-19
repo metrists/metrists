@@ -1,7 +1,6 @@
 import { join } from 'path';
 import { ConfigAwareCommand } from './config-aware.command';
 import { deleteDirectory, pathExists } from '../lib/utils/fs.util';
-import * as chalk from 'chalk';
 import type { Command } from 'commander';
 
 export class PruneCommand extends ConfigAwareCommand {
@@ -9,7 +8,9 @@ export class PruneCommand extends ConfigAwareCommand {
   protected templatePath: string;
 
   public load(program: Command) {
-    return program.command('prune');
+    return program
+      .command('prune')
+      .description('Prune the previous version of the build');
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -24,7 +25,7 @@ export class PruneCommand extends ConfigAwareCommand {
       await deleteDirectory(templatePath);
       this.logger.info('Pruned the previous build');
     } else {
-      this.logger.warn('No previous build found to prune');
+      this.logger.verbose('No previous build found to prune');
     }
   }
 }
