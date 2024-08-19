@@ -23,10 +23,11 @@ export class ConsoleLogger extends Logger {
   protected readonly allowedTypes: LogTypes[];
   constructor(allowedTypes?: LogTypes[]) {
     super();
+    this.allowedTypes = ['info', 'error', 'warn'];
     if (allowedTypes) {
-      this.allowedTypes = allowedTypes;
-    } else {
-      this.allowedTypes = ['info', 'error', 'warn'];
+      this.allowedTypes = Array.from(
+        new Set([...this.allowedTypes, ...allowedTypes]),
+      );
     }
   }
 
