@@ -6,11 +6,20 @@ import { InitCommand } from './init.command';
 import { PublishCommand } from './publish.command';
 import { BuildCommand } from './build.command';
 import { PruneCommand } from './prune.command';
+import {
+  ConsoleLogger,
+  type Logger,
+  type LogTypes,
+} from '../lib/utils/logger.util';
 import { BaseException } from '../exceptions/base.exception';
 import type { Command } from 'commander';
 
 export class CommandLoader {
+  protected static logger: Logger;
   public static load(program: Command): void {
+    this.logger = new ConsoleLogger(
+      this.getLogLevelsFromCommanderOptions(program),
+    );
     program.showSuggestionAfterError();
     this.loadCommandAndAction(new WatchCommand(), program);
     this.loadCommandAndAction(new InitCommand(), program);
@@ -22,11 +31,11 @@ export class CommandLoader {
 
   private static handleInvalidCommand(program: Command) {
     program.on('command:*', () => {
-      console.error(
+      this.logger.error(
         `\n${ERROR_PREFIX} Invalid command: ${chalk.red('%s')}`,
         program.args.join(' '),
       );
-      console.log(
+      this.logger.info(
         `See ${chalk.red('--help')} for a list of available commands.\n`,
       );
       process.exit(1);
@@ -40,15 +49,34 @@ export class CommandLoader {
     const commanderCommand = command.load(program);
     commanderCommand.action(async () => {
       try {
+        const commandLogger = new ConsoleLogger(
+          this.getLogLevelsFromCommanderOptions(commanderCommand),
+        );
+        const services = {
+          logger: commandLogger,
+        };
+        command.setServices(services);
         return await command.handle(commanderCommand);
       } catch (error: any) {
         if (error instanceof BaseException) {
-          console.error(`${ERROR_PREFIX} ${chalk.red(error.getMessage())}`);
+          this.logger.error(`${ERROR_PREFIX} ${error.getMessage()}`);
           process.exit(1);
         }
         throw error;
       }
     });
     return commanderCommand;
+  }
+
+  protected static getLogLevelsFromCommanderOptions(
+    commanderCommand: Command,
+  ): LogTypes[] | null {
+    const logLevelOptions: LogTypes[] = ['verbose', 'noob'];
+
+    const options = commanderCommand.optsWithGlobals();
+    const logLevel = logLevelOptions.filter((option) => options[option]);
+    if (logLevel) {
+      return logLevel;
+    }
   }
 }

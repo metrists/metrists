@@ -1,25 +1,38 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { gray } from 'chalk';
+import type { Logger } from './logger.util';
 
 type SpawnParams = Parameters<typeof spawn>;
 
-function defaultOutHandler(data) {
-  console.error(gray(data.toString()));
+function getDefaultOutHandler(logger) {
+  return (data) => {
+    logger.verbose(gray(data.toString()));
+  };
 }
-
-function defaultErrHandler(data) {
-  console.error(gray(data.toString()));
+function getDefaultErrHandler(logger) {
+  return (data) => {
+    logger.error(gray(data.toString()));
+  };
 }
 
 export async function spawnAndWait(
+  logger: Logger,
   command: SpawnParams[0],
   args: SpawnParams[1],
   cwd: Partial<SpawnParams[2]> = {},
   options?: {
-    stdErrListener?: (data: Buffer, next: typeof defaultErrHandler) => void;
-    stdOutListener?: (data: Buffer, next: typeof defaultOutHandler) => void;
+    stdErrListener?: (
+      data: Buffer,
+      next: ReturnType<typeof getDefaultErrHandler>,
+    ) => void;
+    stdOutListener?: (
+      data: Buffer,
+      next: ReturnType<typeof getDefaultOutHandler>,
+    ) => void;
   },
 ): Promise<ChildProcess> {
+  const defaultErrHandler = getDefaultErrHandler(logger);
+  const defaultOutHandler = getDefaultOutHandler(logger);
   const stdErrListener = options?.stdErrListener ?? defaultErrHandler;
   const stdOutListener = options?.stdOutListener ?? defaultOutHandler;
 

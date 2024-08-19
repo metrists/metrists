@@ -15,6 +15,24 @@ import {
 } from '../lib/utils/meta-filler.util';
 import type { Command } from 'commander';
 
+type UndefIndex<T extends any[], I extends number> = {
+  [P in keyof T]: P extends Exclude<keyof T, keyof any[]>
+    ? P extends `${I}`
+      ? undefined
+      : T[P]
+    : T[P];
+};
+type FilterUndefined<T extends any[]> = T extends []
+  ? []
+  : T extends [infer H, ...infer R]
+  ? H extends undefined
+    ? FilterUndefined<R>
+    : [H, ...FilterUndefined<R>]
+  : T;
+type SpliceTuple<T extends any[], I extends number> = FilterUndefined<
+  UndefIndex<T, I>
+>;
+
 export class InitCommand extends ConfigAwareCommand {
   protected outDir: string;
   protected workingDirectory: string;
@@ -80,9 +98,9 @@ export class InitCommand extends ConfigAwareCommand {
   }
 
   protected async spawnAndWaitAndStopIfError(
-    ...args: Parameters<typeof spawnAndWait>
+    ...args: SpliceTuple<Parameters<typeof spawnAndWait>, 0>
   ) {
-    const childProcess = await spawnAndWait(...args);
+    const childProcess = await spawnAndWait(this.logger, ...args);
     if (childProcess.exitCode) {
       process.exit(childProcess.exitCode);
     }
@@ -125,7 +143,7 @@ export class InitCommand extends ConfigAwareCommand {
 
   protected async copyAndInstallTemplate() {
     await this.copyTemplate();
-    console.log(chalk.green('Successfully Added Template'));
+    this.logger.log(['verbose', 'noob'], 'Successfully Added Template');
     await this.spawnAndWaitAndStopIfError(
       'npm',
       ['install', '--legacy-peer-deps'],
@@ -133,7 +151,7 @@ export class InitCommand extends ConfigAwareCommand {
         cwd: this.templatePath,
       },
     );
-    console.log(chalk.green('Successfully Installed Dependencies'));
+    this.logger.log(['verbose', 'noob'], 'Successfully Installed Dependencies');
   }
 
   protected async copyTemplate() {

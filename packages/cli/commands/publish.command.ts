@@ -2,9 +2,9 @@ import { InitCommand } from './init.command';
 import { createFileIfNotExists } from '../lib/utils/fs.util';
 import { getHostHelper, getSupportedHosts } from '../lib/utils/hosts.util';
 import { name } from '../package.json';
-import type { Command } from 'commander';
 import { UnsupportedHostException } from '../exceptions/unsupported-host.exception';
 import { HostNotProvidedException } from '../exceptions/host-not-provided.exception';
+import type { Command } from 'commander';
 
 export class PublishCommand extends InitCommand {
   public load(program: Command) {
