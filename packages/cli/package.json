@@ -19,13 +19,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/metrists/metrists-cli.git"
+    "url": "git+https://github.com/metrists/metrists.git"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/metrists/metrists-cli/issues"
+    "url": "https://github.com/metrists/metrists/issues"
   },
-  "homepage": "https://github.com/metrists/metrists-cli#readme",
+  "homepage": "https://github.com/metrists/metrists#readme",
   "dependencies": {
     "chalk": "^3.0.0",
     "chokidar": "^3.6.0",
