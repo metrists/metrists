@@ -1,5 +1,4 @@
 import { join } from 'path';
-import * as chalk from 'chalk';
 import { ConfigAwareCommand } from './config-aware.command';
 import { spawnAndWait } from '../lib/utils/process.util';
 import {

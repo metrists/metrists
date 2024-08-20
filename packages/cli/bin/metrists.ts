@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import * as commander from 'commander';
+import { ensureSupportedNodeVersion } from '../lib/utils/version.util';
 import { program } from 'commander';
 import * as path from 'path';
 import { CommandLoader } from '../commands';
@@ -9,6 +9,7 @@ import {
 } from '../lib/utils/local-binaries.util';
 
 const bootstrap = () => {
+  ensureSupportedNodeVersion();
   const currentWorkingDirectory = __dirname;
 
   const packageJsonPaths = path.join(
