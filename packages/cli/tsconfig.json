@@ -50,6 +50,7 @@
     ".circleci",
     ".eslint.json",
     ".prettierrc",
-    "nodemon.json"
+    "nodemon.json",
+    "**/*.test.ts"
   ]
 }

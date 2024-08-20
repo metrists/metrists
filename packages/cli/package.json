@@ -15,7 +15,8 @@
     "build": "tsc",
     "dev": "ts-node ./bin/metrists.ts",
     "dev:build": "nodemon --config nodemon.json --exec npm run build",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint . --ext .ts",
+    "test": "jest"
   },
   "repository": {
     "type": "git",

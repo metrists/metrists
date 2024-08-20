@@ -9,9 +9,16 @@
     "build": "npm run build:cli && npm run sync-themes",
     "build:cli": "cd packages/cli && npm install && npm run build",
     "dev:build": "cd packages/cli && npm install && npm run dev:build",
+    "test:cli": "cd packages/cli && npm install && npm run test",
     "sync-themes": "rsync -av --delete --exclude-from=.rsync-exclude packages/themes/ packages/cli/dist/themes/",
     "publish": "npm run build && cat README.md > ./packages/cli/README.md && cd packages/cli && npm publish --access public",
     "publish:patch": "npm run build && cat README.md > ./packages/cli/README.md && cd packages/cli && npm version patch && npm publish --access public",
     "publish:minor": "npm run build && cat README.md > ./packages/cli/README.md && cd packages/cli && npm version minor && npm publish --access public"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "execa": "^9.3.1",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.4"
   }
 }
