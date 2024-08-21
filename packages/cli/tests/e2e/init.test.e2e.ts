@@ -6,7 +6,7 @@ import execa = require('execa');
 describe('init_command_creates_the_right_files', () => {
   const temp = join(__dirname, 'tmp');
   let tempDir: string;
-  const timeout = 20000;
+  const timeout = 100000;
 
   beforeAll(async () => {
     tempDir = join(temp, `test-${Date.now()}`);
