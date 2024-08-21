@@ -1,9 +1,9 @@
 import { join } from 'path';
-import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'fs';
+import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
 import { describe, expect, it, afterAll, beforeAll } from '@jest/globals';
 import execa = require('execa');
 
-describe('init_command_creates_the_right_files', () => {
+describe('prune_command_deletes_the_right_files', () => {
   const temp = join(__dirname, 'tmp');
   let tempDir: string;
   const timeout = 20000;
@@ -11,6 +11,10 @@ describe('init_command_creates_the_right_files', () => {
   beforeAll(async () => {
     tempDir = join(temp, `test-${Date.now()}`);
     mkdirSync(tempDir, { recursive: true });
+
+    const markdownFilePath = join(tempDir, 'test.md');
+    writeFileSync(markdownFilePath, '# Test Markdown File', 'utf-8');
+
     await execa('node', ['../../../../dist/bin/metrists.js', 'init'], {
       cwd: tempDir,
     });
@@ -21,29 +25,19 @@ describe('init_command_creates_the_right_files', () => {
   }, timeout);
 
   it(
-    'Should create a .metrists',
+    'Should prune the .metrists directory',
     async () => {
-      const markdownFilePath = join(tempDir, 'test.md');
-      writeFileSync(markdownFilePath, '# Test Markdown File', 'utf-8');
+      const directoryExistsBeforePrune = existsSync(join(tempDir, '.metrists'));
+      expect(directoryExistsBeforePrune).toBe(true);
+
+      await execa('node', ['../../../../dist/bin/metrists.js', 'prune'], {
+        cwd: tempDir,
+      });
 
       const metristsDirPath = join(tempDir, '.metrists');
       const directoryExists = existsSync(metristsDirPath);
 
-      expect(directoryExists).toBe(true);
-    },
-    timeout,
-  );
-
-  it(
-    '.gitignore should exist and contain .metrists',
-    async () => {
-      const gitignorePath = join(tempDir, '.gitignore');
-      const gitignoreExists = existsSync(gitignorePath);
-
-      expect(gitignoreExists).toBe(true);
-
-      const fileContent = readFileSync(gitignorePath, 'utf-8');
-      expect(fileContent).toContain('.metrists');
+      expect(directoryExists).toBe(false);
     },
     timeout,
   );
