@@ -16,24 +16,31 @@ const ChapterDocumentFrontmatter = z.object({
   updated: z.string().date().optional(),
 });
 
-export function getArbitraryMeta(directoryName: string): z.infer<typeof MetaDocumentFrontmatter> {
+export function getArbitraryMeta(
+  directoryName: string,
+  author?: string,
+  tags?: string[],
+  date?: string,
+): z.infer<typeof MetaDocumentFrontmatter> {
   return {
     title: getSanitizedTitle(directoryName),
-    author: getCurrentUsername(),
-    date: getCurrentDate(),
-    tags: ['novel'],
+    author: author || getCurrentUsername(),
+    date: date || getCurrentDate(),
+    tags: tags || ['novel'],
   };
 }
 
 export function getArbitraryChapter(
   fileName: string,
   index: number,
+  author?: string,
+  date?: string,
 ): z.infer<typeof ChapterDocumentFrontmatter> {
   return {
     title: getSanitizedTitle(fileName),
     index,
-    author: getCurrentUsername(),
-    date: getCurrentDate(),
+    author: author || getCurrentUsername(),
+    date: date || getCurrentDate(),
     updated: getCurrentDate(),
   };
 }
