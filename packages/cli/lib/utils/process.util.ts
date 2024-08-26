@@ -11,7 +11,7 @@ function getDefaultOutHandler(logger) {
 }
 function getDefaultErrHandler(logger) {
   return (data) => {
-    logger.error(gray(data.toString()));
+    logger.verbose(gray(data.toString()));
   };
 }
 
