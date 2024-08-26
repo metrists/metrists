@@ -60,10 +60,8 @@ export class WatchCommand extends InitCommand {
               try {
                 open(localUrl);
                 serverStarted = true;
-                this.logger.info(chalk.green(`Server started at ${localUrl}`));
-              } catch (e) {
-                this.logger.info(chalk.green(`Server started at ${localUrl}`));
-              }
+              } catch (e) {}
+              this.logger.info(chalk.green(`Server started at ${localUrl}`));
             }
           }
           next(data);
