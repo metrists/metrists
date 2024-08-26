@@ -60,6 +60,9 @@ export class InitCommand extends ConfigAwareCommand {
     ];
 
     if (isFirstRun) {
+      this.logger.noob(
+        `Since this is the first run, we will copy a web-template to the ${outDir} directory.`,
+      );
       initialSetupPromises.push(this.copyAndInstallTemplate());
     }
 
@@ -81,11 +84,20 @@ export class InitCommand extends ConfigAwareCommand {
       templateAssetsRelativePath,
     );
 
+    this.logger.noob(
+      `Adding the ${outDir} directory to .gitignore, to avoid committing it to git.`,
+    );
     const createGitIGnoreAndCopyFilesPromise: Promise<any>[] = [
       this.createGitIgnoreFile(),
     ];
 
     if (isFirstRun) {
+      this.logger.noob(
+        `Copying non-markdown files into the asset path of the template.`,
+      );
+      this.logger.noob(
+        `Copying the markdown files into the content path of the template.`,
+      );
       createGitIGnoreAndCopyFilesPromise.concat(
         this.copyAssetsAndContentFilesToTemplate(),
       );
@@ -220,7 +232,11 @@ export class InitCommand extends ConfigAwareCommand {
 
   protected async addOrUpdateMetadataOfFiles() {
     return Promise.all([
-      createOrModifyMetaFile(this.workingDirectory, this.metaFileName),
+      createOrModifyMetaFile(
+        this.logger,
+        this.workingDirectory,
+        this.metaFileName,
+      ),
       performOnAllFilesInDirectory(
         this.workingDirectory,
         createOrModifyChapterFile,

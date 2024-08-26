@@ -11,9 +11,16 @@ import {
   replaceFrontmatter,
   type Frontmatter,
 } from './frontmatter.util';
-import { writeToFile, createFile, pathExists, readFile, combinePaths } from './fs.util';
+import {
+  writeToFile,
+  createFile,
+  pathExists,
+  readFile,
+  combinePaths,
+} from './fs.util';
 import { sep } from 'path';
 import { SafeParseReturnType } from 'zod';
+import { Logger } from './logger.util';
 
 export async function createOrModifyChapterFile(filePath, index: number) {
   const sanitizedFileName = getLastPartOfThePath(filePath);
@@ -26,15 +33,24 @@ export async function createOrModifyChapterFile(filePath, index: number) {
   );
 }
 
-export async function createOrModifyMetaFile(baseDir: string, metaFileName: string) {
+export async function createOrModifyMetaFile(
+  logger: Logger,
+  baseDir: string,
+  metaFileName: string,
+) {
   const metaFilePath = combinePaths([baseDir, metaFileName]);
 
   const directoryName = getLastPartOfThePath(baseDir);
   const arbitraryMeta = getArbitraryMeta(directoryName);
 
   if (!pathExists(metaFilePath)) {
+    logger.verbose(`Meta file does not exist. Creating the meta file.`);
+    logger.noob(
+      `Creating a meta file that contains tile, author, date, tags and short description about the book.`,
+    );
     return await createFileWithFrontmatter(metaFilePath, arbitraryMeta);
   } else {
+    logger.verbose(`Meta file already exists. Updating the meta file.`);
     return await updateFileWithFrontmatter(
       metaFilePath,
       arbitraryMeta,
@@ -43,7 +59,10 @@ export async function createOrModifyMetaFile(baseDir: string, metaFileName: stri
   }
 }
 
-async function createFileWithFrontmatter(metaFilePath: string, frontmatter: Frontmatter) {
+async function createFileWithFrontmatter(
+  metaFilePath: string,
+  frontmatter: Frontmatter,
+) {
   return await createFile(metaFilePath, serializeFrontmatter(frontmatter));
 }
 
@@ -67,7 +86,11 @@ async function updateFileWithFrontmatter(
       );
     }
   } else {
-    return await appendFileWithFrontmatter(filePath, fileContent, arbitraryMeta);
+    return await appendFileWithFrontmatter(
+      filePath,
+      fileContent,
+      arbitraryMeta,
+    );
   }
 }
 
