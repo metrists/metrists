@@ -5,11 +5,13 @@ import execa = require('execa');
 
 describe('init_command_creates_the_right_files', () => {
   const temp = join(__dirname, 'tmp');
+  let tempDirName: string;
   let tempDir: string;
   const timeout = 100000;
 
   beforeAll(async () => {
-    tempDir = join(temp, `test-${Date.now()}`);
+    tempDirName = `test-${Date.now()}`;
+    tempDir = join(temp, tempDirName);
     mkdirSync(tempDir, { recursive: true });
     await execa('node', ['../../../../dist/bin/metrists.js', 'init'], {
       cwd: tempDir,
@@ -44,6 +46,20 @@ describe('init_command_creates_the_right_files', () => {
 
       const fileContent = readFileSync(gitignorePath, 'utf-8');
       expect(fileContent).toContain('.metrists');
+    },
+    timeout,
+  );
+
+  it(
+    'meta file should exists and contain the right content',
+    async () => {
+      const metaPath = join(tempDir, 'meta.md');
+      const metaExists = existsSync(metaPath);
+
+      expect(metaExists).toBe(true);
+
+      const fileContent = readFileSync(metaPath, 'utf-8');
+      expect(fileContent).toContain(`title: ${tempDirName.replace('-', ' ')}`);
     },
     timeout,
   );

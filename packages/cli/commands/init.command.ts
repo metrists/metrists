@@ -52,7 +52,6 @@ export class InitCommand extends ConfigAwareCommand {
 
     this.workingDirectory = process.cwd();
     const outDir = this.getRc((rc) => rc?.outDir);
-    this.workingDirectory = process.cwd();
     this.templatePath = join(this.workingDirectory, outDir);
     const isFirstRun = this.isFirstRun(this.templatePath);
 
