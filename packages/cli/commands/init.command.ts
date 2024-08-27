@@ -13,7 +13,6 @@ import {
   createOrModifyMetaFile,
   createOrModifyChapterFile,
 } from '../lib/utils/meta-filler.util';
-import { generateExampleBook } from '../lib/utils/example-book.util';
 import { ExampleDirectoryNotEmptyException } from '../exceptions/example-directory-not-empty.exception';
 import type { Command } from 'commander';
 
@@ -58,7 +57,7 @@ export class InitCommand extends ConfigAwareCommand {
     this.workingDirectory = process.cwd();
 
     if (command.opts().example) {
-      await this.createExampleBookFiles();
+      await this.copyExampleFilesToWorkingDirectory();
     }
     await this.loadRcConfig();
 
@@ -256,11 +255,17 @@ export class InitCommand extends ConfigAwareCommand {
     ]);
   }
 
-  protected async createExampleBookFiles() {
+  protected async copyExampleFilesToWorkingDirectory() {
     if (!directoryEmpty(this.workingDirectory)) {
       throw new ExampleDirectoryNotEmptyException();
     }
 
-    await generateExampleBook(this.logger, this.workingDirectory);
+    const exampleDirectory = 'everyone-poops';
+    const fullExamplePath = join(__dirname, '..', 'examples', exampleDirectory);
+    await copyAllFilesFromOneDirectoryToAnother(
+      fullExamplePath,
+      this.workingDirectory,
+      () => true,
+    );
   }
 }
