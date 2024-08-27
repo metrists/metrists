@@ -11,6 +11,7 @@ export class PublishCommand extends InitCommand {
     return program
       .command('publish')
       .alias('p')
+      .option('--example', 'Generate an example book')
       .argument('[platform]', 'Platform where the book will be published')
       .description('Publish a production build of the book');
   }

@@ -6,12 +6,15 @@ import {
   pathExists,
   createDirectory,
   performOnAllFilesInDirectory,
+  directoryEmpty,
 } from '../lib/utils/fs.util';
 import { addToGitIgnore } from '../lib/utils/gitignore.util';
 import {
   createOrModifyMetaFile,
   createOrModifyChapterFile,
 } from '../lib/utils/meta-filler.util';
+import { generateExampleBook } from '../lib/utils/example-book.util';
+import { ExampleDirectoryNotEmptyException } from '../exceptions/example-directory-not-empty.exception';
 import type { Command } from 'commander';
 
 type UndefIndex<T extends any[], I extends number> = {
@@ -43,14 +46,22 @@ export class InitCommand extends ConfigAwareCommand {
   protected metaFileName = 'meta.md';
 
   public load(program: Command) {
-    return program.command('init').alias('i');
+    return program
+      .command('init')
+      .alias('i')
+      .option('--example', 'Generate an example book')
+      .description('Initialize the metrists project');
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public async handle(command: Command) {
+    this.workingDirectory = process.cwd();
+
+    if (command.opts().example) {
+      await this.createExampleBookFiles();
+    }
     await this.loadRcConfig();
 
-    this.workingDirectory = process.cwd();
     const outDir = this.getRc((rc) => rc?.outDir);
     this.templatePath = join(this.workingDirectory, outDir);
     const isFirstRun = this.isFirstRun(this.templatePath);
@@ -243,5 +254,13 @@ export class InitCommand extends ConfigAwareCommand {
         this.shouldIncludeChapterFile.bind(this),
       ),
     ]);
+  }
+
+  protected async createExampleBookFiles() {
+    if (!directoryEmpty(this.workingDirectory)) {
+      throw new ExampleDirectoryNotEmptyException();
+    }
+
+    await generateExampleBook(this.logger, this.workingDirectory);
   }
 }

@@ -21,6 +21,7 @@ export class WatchCommand extends InitCommand {
     return program
       .command('watch')
       .alias('w')
+      .option('--example', 'Generate an example book')
       .description('Watch for the changes and sync them into the dev server');
   }
 

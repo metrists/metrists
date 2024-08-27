@@ -11,6 +11,7 @@ export class BuildCommand extends InitCommand {
     return program
       .command('build')
       .alias('b')
+      .option('--example', 'Generate an example book')
       .description('Build a production version of the book')
       .option('-o, --out <path>', 'Output directory for the production build');
   }
