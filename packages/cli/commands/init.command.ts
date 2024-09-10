@@ -35,20 +35,25 @@ type SpliceTuple<T extends any[], I extends number> = FilterUndefined<
 >;
 
 export class InitCommand extends ConfigAwareCommand {
+  protected static ignoredFiles = ['.gitignore', '.metristsrc'];
+  protected static ignoredDirectories = ['.git'];
+  protected static metaFileName = 'meta.md';
+  protected static defaultExample = 'everyone-poops';
   protected outDir: string;
   protected workingDirectory: string;
   protected templatePath: string;
   protected templateContentPath: string;
   protected templateAssetsPath: string;
-  protected ignoredFiles = ['.gitignore', '.metristsrc'];
-  protected ignoredDirectories = ['.git'];
-  protected metaFileName = 'meta.md';
 
   public load(program: Command) {
     return program
       .command('init')
       .alias('i')
-      .option('--example', 'Generate an example book')
+      .option(
+        '--example [example]',
+        'Generate an example book',
+        InitCommand.defaultExample,
+      )
       .description('Initialize the metrists project');
   }
 
@@ -56,8 +61,11 @@ export class InitCommand extends ConfigAwareCommand {
   public async handle(command: Command) {
     this.workingDirectory = process.cwd();
 
-    if (command.opts().example) {
-      await this.copyExampleFilesToWorkingDirectory();
+    const example: string | true | undefined = command.opts().example;
+    if (example) {
+      await this.copyExampleFilesToWorkingDirectory(
+        example === true ? undefined : example,
+      );
     }
     await this.loadRcConfig();
 
@@ -117,6 +125,10 @@ export class InitCommand extends ConfigAwareCommand {
     await Promise.all(createGitIGnoreAndCopyFilesPromise);
   }
 
+  public static getMetaFileName() {
+    return InitCommand.metaFileName;
+  }
+
   protected async spawnAndWaitAndStopIfError(
     ...args: SpliceTuple<Parameters<typeof spawnAndWait>, 0>
   ) {
@@ -127,10 +139,10 @@ export class InitCommand extends ConfigAwareCommand {
   }
 
   protected shouldIncludeFile(filePath: string) {
-    const isIgnoredDirectory = this.ignoredDirectories.some((dir) =>
+    const isIgnoredDirectory = InitCommand.ignoredDirectories.some((dir) =>
       filePath.includes(dir),
     );
-    const isIgnoredFile = this.ignoredFiles.some((file) =>
+    const isIgnoredFile = InitCommand.ignoredFiles.some((file) =>
       filePath.endsWith(file),
     );
     return (
@@ -143,7 +155,7 @@ export class InitCommand extends ConfigAwareCommand {
   protected shouldIncludeChapterFile(filePath: string) {
     return (
       this.shouldIncludeFile(filePath) &&
-      !filePath.endsWith(this.metaFileName) &&
+      !filePath.endsWith(InitCommand.metaFileName) &&
       this.getChangedFileType(filePath) === 'content'
     );
   }
@@ -245,7 +257,7 @@ export class InitCommand extends ConfigAwareCommand {
       createOrModifyMetaFile(
         this.logger,
         this.workingDirectory,
-        this.metaFileName,
+        InitCommand.metaFileName,
       ),
       performOnAllFilesInDirectory(
         this.workingDirectory,
@@ -255,12 +267,12 @@ export class InitCommand extends ConfigAwareCommand {
     ]);
   }
 
-  protected async copyExampleFilesToWorkingDirectory() {
+  protected async copyExampleFilesToWorkingDirectory(example?: string) {
     if (!directoryEmpty(this.workingDirectory)) {
       throw new ExampleDirectoryNotEmptyException();
     }
 
-    const exampleDirectory = 'everyone-poops';
+    const exampleDirectory = example ?? InitCommand.defaultExample;
     const fullExamplePath = join(__dirname, '..', 'examples', exampleDirectory);
     await copyAllFilesFromOneDirectoryToAnother(
       fullExamplePath,
