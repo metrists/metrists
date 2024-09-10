@@ -168,3 +168,8 @@ export async function copyFile(
 export async function deleteFile(path: string) {
   return await unlink(path);
 }
+
+export async function directoryEmpty(directoryPath: string) {
+  const dirents = await readdir(directoryPath, { withFileTypes: true });
+  return dirents.length === 0;
+}

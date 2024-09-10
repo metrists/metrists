@@ -12,6 +12,11 @@ export class PublishCommand extends InitCommand {
       .command('publish')
       .alias('p')
       .argument('[platform]', 'Platform where the book will be published')
+      .option(
+        '--example [example]',
+        'Generate an example book',
+        InitCommand.defaultExample,
+      )
       .description('Publish a production build of the book');
   }
 
@@ -23,7 +28,9 @@ export class PublishCommand extends InitCommand {
     await this.createHostingConfig(platform);
   }
 
-  protected async createHostingConfig(hostingPlatform) {
+  protected async createHostingConfig(
+    hostingPlatform: Parameters<typeof getHostHelper>[0],
+  ) {
     if (!hostingPlatform) {
       throw new HostNotProvidedException({
         supportedHosts: this.getSupportedHosts(),

@@ -1,5 +1,4 @@
 import { InitCommand } from './init.command';
-import { spawnAndWait } from '../lib/utils/process.util';
 import {
   copyAllFilesFromOneDirectoryToAnother,
   combinePaths,
@@ -11,8 +10,13 @@ export class BuildCommand extends InitCommand {
     return program
       .command('build')
       .alias('b')
-      .description('Build a production version of the book')
-      .option('-o, --out <path>', 'Output directory for the production build');
+      .option('-o, --out <path>', 'Output directory for the production build')
+      .option(
+        '--example [example]',
+        'Generate an example book',
+        InitCommand.defaultExample,
+      )
+      .description('Build a production version of the book');
   }
 
   public async handle(command: ReturnType<typeof BuildCommand.prototype.load>) {
