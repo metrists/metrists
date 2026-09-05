@@ -87,6 +87,15 @@ export {
   type PromptBlobRecord,
 } from "./prompt/store";
 
+/** The widget's own phase math, for app surfaces that mirror widget state
+ *  (the document minimap) without reimplementing it. */
+export {
+  derivePhase,
+  deriveQueuePosition,
+  deriveWidgetResponse,
+  type BlobPhase,
+} from "./prompt/state";
+
 /**
  * The translation keys this package resolves — the host application owns the
  * strings, and asserts against this list that it defines every one.

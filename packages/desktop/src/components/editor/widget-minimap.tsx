@@ -1,62 +1,49 @@
 /**
  * MET-172: a delicate map of the document's prompt widgets, rendered as a
- * vertical hairline rail along the editor's right edge. One dot per
- * widget, placed along the line proportionally to the widget's position
- * in the document; hovering the rail wakes the line and dots slightly,
- * hovering a dot swells it and reveals a sliver of the widget's title;
- * clicking jumps to the widget (reusing jumpToBlob's scroll-and-flash).
+ * vertical gooey rail along the editor's right edge. One dot per widget,
+ * placed proportionally to the widget's position; each dot also carries
+ * its widget's state: a crisp core colored by phase, breathing while the
+ * turn runs, pinging when blocked on the user, and staying accented until
+ * a finished result has actually been scrolled into view. Hovering a dot
+ * swells it and shows the title plus a phase line; clicking jumps to the
+ * widget (reusing jumpToBlob's scroll-and-flash).
  *
- * Everything is derived: widget positions come from the live ProseMirror
- * doc on each doc-changing transaction, titles from the draft text in the
- * node or the blob store's last sent prompt. No persistent state, no
- * registry — the rail disappears with the last widget.
+ * Everything is derived: positions from the live ProseMirror doc, titles
+ * from the draft text or blob store, phases from the same rows the widget
+ * face reads (`derivePhase`). No persistent state — "seen" for finished
+ * rounds is session-scoped by design.
  */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useReducer, useState } from "react";
 import type { Editor } from "@tiptap/core";
-import type { Node as PMNode } from "@tiptap/pm/model";
-import { PROMPT_NODE_NAME, getPromptBlob } from "@notefig/widgets";
+import { useLiveQuery, eq } from "@tanstack/react-db";
+import {
+  getPromptBlob,
+  subscribePromptBlob,
+  derivePhase,
+  deriveQueuePosition,
+  deriveWidgetResponse,
+  type BlobPhase,
+} from "@notefig/widgets";
+import { sortEntriesChronologically } from "@notefig/shared/agent";
+import {
+  agentEntriesCollection,
+  agentPermissionRequestsCollection,
+  agentTasksCollection,
+  agentTurnsCollection,
+} from "@/agent/agent-collections";
 import { jumpToBlob } from "./blobs/jump-to-blob";
+import {
+  deriveWidgetMapEntries,
+  describeDotState,
+  type WidgetMapEntry,
+} from "./widget-minimap-state";
+import "./widget-minimap.css";
 
-export type WidgetMapEntry = {
-  /** Unique per entry: blobId alone can recur (external edits can
-   *  duplicate a marker), so the document position disambiguates. */
-  key: string;
-  blobId: string | null;
-  /** 0..1 position of the widget within the document. */
-  ratio: number;
-  /** Short human handle: draft text, else last sent prompt, else generic. */
-  title: string;
-};
-
-const TITLE_MAX_CHARS = 48;
-
-/** Pure derivation, exported for tests. */
-export function deriveWidgetMapEntries(doc: PMNode): WidgetMapEntry[] {
-  const entries: WidgetMapEntry[] = [];
-  const size = Math.max(doc.content.size, 1);
-  doc.descendants((node, pos) => {
-    if (node.type.name !== PROMPT_NODE_NAME) return true;
-    const blobId = (node.attrs.blobId as string | null) ?? null;
-    const draftText = node.firstChild?.textContent.trim() ?? "";
-    const title =
-      draftText ||
-      (blobId ? getPromptBlob(blobId).lastSentPrompt.trim() : "") ||
-      "Prompt";
-    entries.push({
-      key: `${blobId ?? "pos"}-${pos}`,
-      blobId,
-      // Clamped in from the edges so the first/last dot never sits on the
-      // rail's boundary.
-      ratio: Math.min(Math.max(pos / size, 0.01), 0.99),
-      title:
-        title.length > TITLE_MAX_CHARS
-          ? `${title.slice(0, TITLE_MAX_CHARS)}…`
-          : title,
-    });
-    return false;
-  });
-  return entries;
-}
+export {
+  deriveWidgetMapEntries,
+  describeDotState,
+  type WidgetMapEntry,
+} from "./widget-minimap-state";
 
 function useWidgetMapEntries(editor: Editor): WidgetMapEntry[] {
   const [entries, setEntries] = useState<WidgetMapEntry[]>(() =>
@@ -87,6 +74,162 @@ function useWidgetMapEntries(editor: Editor): WidgetMapEntry[] {
   return entries;
 }
 
+type EntryLiveState = {
+  phase: BlobPhase;
+  queueAhead: number;
+  /** Identity of the bound round, for session-scoped seen-tracking. */
+  roundKey: string | null;
+  /** Turn completed but answered with an issue (widget_respond). */
+  issue: boolean;
+};
+
+const COMPOSING: EntryLiveState = {
+  phase: "composing",
+  queueAhead: 0,
+  roundKey: null,
+  issue: false,
+};
+
+/**
+ * Each entry's phase, from the same rows the widget face reads. One bulk
+ * subscription instead of per-dot queries: the agent collections are
+ * session-scale, so filtering in JS is cheaper than N live queries.
+ */
+function useEntryLiveStates(
+  entries: WidgetMapEntry[],
+): Map<string, EntryLiveState> {
+  const [tick, bump] = useReducer((c: number) => c + 1, 0);
+  const blobIdsKey = entries
+    .map((e) => e.blobId)
+    .filter(Boolean)
+    .join("|");
+  useEffect(() => {
+    const ids = blobIdsKey ? blobIdsKey.split("|") : [];
+    const unsubscribes = ids.map((id) => subscribePromptBlob(id, bump));
+    return () => unsubscribes.forEach((u) => u());
+  }, [blobIdsKey]);
+
+  const { data: turns = [] } = useLiveQuery((q) =>
+    q.from({ turn: agentTurnsCollection }),
+  );
+  const { data: tasks = [] } = useLiveQuery((q) =>
+    q.from({ task: agentTasksCollection }),
+  );
+  const { data: pendingPermissions = [] } = useLiveQuery((q) =>
+    q
+      .from({ req: agentPermissionRequestsCollection })
+      .where(({ req }) => eq(req.status, "pending")),
+  );
+  const { data: allEntries = [] } = useLiveQuery((q) =>
+    q.from({ entry: agentEntriesCollection }),
+  );
+
+  return useMemo(() => {
+    void tick;
+    const map = new Map<string, EntryLiveState>();
+    for (const entry of entries) {
+      if (!entry.blobId) {
+        map.set(entry.key, COMPOSING);
+        continue;
+      }
+      const record = getPromptBlob(entry.blobId);
+      const turn = record.boundTurnId
+        ? turns.find((t) => t.turnId === record.boundTurnId)
+        : undefined;
+      const task = record.boundTaskId
+        ? tasks.find((t) => t.taskId === record.boundTaskId)
+        : undefined;
+      const hasPendingPermission =
+        !!record.boundTaskId &&
+        pendingPermissions.some((p) => p.taskId === record.boundTaskId);
+      const phase = derivePhase({
+        turn,
+        task,
+        hasPendingPermission,
+        isSending: false,
+      });
+      // The face's amber warning: a completed turn whose widget_respond
+      // answer is kind "issue". Derived only for done rounds — everything
+      // else skips the transcript scan.
+      const issue =
+        phase === "done" && record.boundTurnId
+          ? deriveWidgetResponse(
+              sortEntriesChronologically(
+                allEntries.filter((e) => e.turnId === record.boundTurnId),
+              ),
+            )?.kind === "issue"
+          : false;
+      map.set(entry.key, {
+        phase,
+        queueAhead:
+          phase === "queued" && record.boundTurnId
+            ? deriveQueuePosition(
+                turns.filter((t) => t.taskId === record.boundTaskId),
+                record.boundTurnId,
+              )
+            : 0,
+        roundKey:
+          turn && record.boundTurnId
+            ? `${entry.blobId}:${record.boundTurnId}`
+            : null,
+        issue,
+      });
+    }
+    return map;
+  }, [entries, turns, tasks, pendingPermissions, allEntries, tick]);
+}
+
+/** Finished rounds whose widget the user has scrolled into view. Session-
+ *  scoped on purpose: nothing persists, ids never recur (MET-172). */
+const seenRounds = new Set<string>();
+
+/**
+ * Watches each done-but-unseen widget's element; when one becomes visible,
+ * its round is marked seen and the dot decays from accent to plain.
+ */
+function useSeenRounds(
+  entries: WidgetMapEntry[],
+  liveStates: Map<string, EntryLiveState>,
+  editor: Editor,
+): void {
+  const [, bump] = useReducer((c: number) => c + 1, 0);
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const roundByElement = new Map<Element, string>();
+    for (const entry of entries) {
+      const live = liveStates.get(entry.key);
+      if (
+        !entry.blobId ||
+        live?.phase !== "done" ||
+        !live.roundKey ||
+        seenRounds.has(live.roundKey)
+      )
+        continue;
+      const element = editor.view.dom.querySelector(
+        `[data-blob-id="${CSS.escape(entry.blobId)}"]`,
+      );
+      if (element) roundByElement.set(element, live.roundKey);
+    }
+    if (roundByElement.size === 0) return;
+    const observer = new IntersectionObserver(
+      (observed) => {
+        let marked = false;
+        for (const o of observed) {
+          const roundKey = roundByElement.get(o.target);
+          if (o.isIntersecting && roundKey && !seenRounds.has(roundKey)) {
+            seenRounds.add(roundKey);
+            marked = true;
+          }
+        }
+        if (marked) bump();
+      },
+      { threshold: 0.35 },
+    );
+    for (const element of roundByElement.keys()) observer.observe(element);
+    return () => observer.disconnect();
+  }, [entries, liveStates, editor]);
+}
+
 export function WidgetMinimap({
   editor,
   filePath,
@@ -95,9 +238,23 @@ export function WidgetMinimap({
   filePath: string;
 }) {
   const entries = useWidgetMapEntries(editor);
+  const liveStates = useEntryLiveStates(entries);
+  useSeenRounds(entries, liveStates, editor);
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const gooId = useId();
   if (entries.length === 0) return null;
+
+  const dots = entries.map((entry) => {
+    const live = liveStates.get(entry.key) ?? COMPOSING;
+    return {
+      entry,
+      view: describeDotState(live.phase, {
+        unseen: live.roundKey ? !seenRounds.has(live.roundKey) : false,
+        queueAhead: live.queueAhead,
+        issue: live.issue,
+      }),
+    };
+  });
 
   return (
     <nav
@@ -105,14 +262,17 @@ export function WidgetMinimap({
       aria-label="Prompt widgets in this document"
       data-widget-minimap
     >
-      {/* The visual layer: line and dots drawn together under a gooey
-          filter (blur + alpha contrast), so the line smoothly swells into
-          each circle instead of just crossing it. Drawn at full opacity —
-          the goo math needs solid alpha — and faded via the svg's own
-          opacity, which applies after the filter. */}
+      {/* Two visual layers in one svg, both monochrome — state speaks
+          through form and motion only. The goo layer draws line and dots
+          together under a gooey filter (blur + alpha contrast) so the line
+          smoothly swells into each circle. The crisp layer above carries
+          the semantics: hollow punches (empty vessels), a bright core
+          bubbling large and small (attention), and a still bright core
+          (unread result). The goo draws at full alpha — its math needs it
+          — and fades via group opacity, which applies after the filter. */}
       <svg
         aria-hidden
-        className="pointer-events-none absolute inset-0 h-full w-full overflow-visible text-muted-foreground opacity-40 transition-opacity duration-200 group-hover/map:opacity-70"
+        className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
       >
         <defs>
           <filter id={gooId} x="-150%" y="-25%" width="400%" height="150%">
@@ -128,7 +288,37 @@ export function WidgetMinimap({
             />
           </filter>
         </defs>
-        <g filter={`url(#${gooId})`}>
+        {/* Pulse underlay — svg paints in document order, so waves drawn
+            here travel beneath the line and dots. One tempo for every
+            call to action; an errored round's wave carries a super-muted
+            error tint instead of the neutral bright. */}
+        <g className="opacity-80 transition-opacity duration-200 group-hover/map:opacity-100">
+          {dots.map(
+            ({ entry, view }) =>
+              view.ping && (
+                <circle
+                  key={entry.key}
+                  cx="50%"
+                  cy={`${entry.ratio * 100}%`}
+                  className={
+                    view.core === "error"
+                      ? "fill-[color-mix(in_oklab,hsl(var(--destructive))_55%,hsl(var(--background)))]"
+                      : "fill-foreground/70"
+                  }
+                  style={{
+                    animation: "nf-minimap-bubble 1.8s infinite",
+                  }}
+                />
+              ),
+          )}
+        </g>
+        {/* Dimness comes from an opaque color-mix toward the background,
+            NOT group opacity — translucent shapes would let the pulse
+            underlay shine through instead of being occluded. */}
+        <g
+          filter={`url(#${gooId})`}
+          className="text-[color-mix(in_oklab,hsl(var(--muted-foreground))_50%,hsl(var(--background)))] transition-colors duration-200 group-hover/map:text-[color-mix(in_oklab,hsl(var(--muted-foreground))_80%,hsl(var(--background)))]"
+        >
           <line
             x1="50%"
             x2="50%"
@@ -137,27 +327,57 @@ export function WidgetMinimap({
             stroke="currentColor"
             strokeWidth="2"
           />
-          {entries.map((entry) => (
+          {dots.map(({ entry, view }) => (
             <circle
               key={entry.key}
               cx="50%"
               cy={`${entry.ratio * 100}%`}
               fill="currentColor"
-              // Geometry-as-CSS so the swell animates.
+              // Geometry-as-CSS so the swell and breathe animate; the
+              // hover swell suspends the breathe rather than fighting it.
               style={{
                 r: hoveredKey === entry.key ? "6px" : "4px",
                 transition: "r 150ms ease",
+                animation:
+                  view.breathe && hoveredKey !== entry.key
+                    ? "nf-minimap-breathe 2.4s ease-in-out infinite"
+                    : undefined,
               }}
             />
           ))}
         </g>
+        <g className="opacity-80 transition-opacity duration-200 group-hover/map:opacity-100">
+          {dots.map(({ entry, view }) => (
+            <g key={entry.key}>
+              {(view.core === "fresh" || view.core === "error") && (
+                // The bright core marks a round that HOLDS a result —
+                // done or errored. Mid-run blocks (permission, auth) wave
+                // without one: they are interrupted runs, not outcomes.
+                <circle
+                  cx="50%"
+                  cy={`${entry.ratio * 100}%`}
+                  r="1.75"
+                  className="fill-foreground/55"
+                />
+              )}
+              {view.hollow && (
+                <circle
+                  cx="50%"
+                  cy={`${entry.ratio * 100}%`}
+                  r="1.75"
+                  className={`fill-background${view.pulse ? " animate-pulse" : ""}`}
+                />
+              )}
+            </g>
+          ))}
+        </g>
       </svg>
       <div className="relative h-full">
-        {entries.map((entry) => (
+        {dots.map(({ entry, view }) => (
           <button
             key={entry.key}
             type="button"
-            aria-label={`Jump to prompt: ${entry.title}`}
+            aria-label={`Jump to prompt: ${entry.title}${view.label ? ` (${view.label})` : ""}`}
             onClick={() => {
               if (entry.blobId) jumpToBlob(filePath, entry.blobId);
             }}
