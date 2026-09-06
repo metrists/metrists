@@ -101,7 +101,7 @@ export class MinimapRailView implements PluginView {
     this.nav = document.createElement("nav");
     this.nav.setAttribute("data-widget-minimap", "");
     this.nav.setAttribute("aria-label", "Prompt widgets in this document");
-    this.nav.className = "group/map absolute right-4 top-6 h-28 w-3";
+    this.nav.className = "group/map absolute right-2 top-6 h-28 w-3";
     this.nav.hidden = true;
 
     const svg = svgEl("svg");
