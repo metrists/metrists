@@ -165,9 +165,6 @@ export function TextEditor({
           filePath={file.path}
         />
         <TableMenu editor={editor} />
-        {/* The "@" mention popup for this document's prompt drafts —
-            mounted here, like the link and table menus, because the
-            suggestion plugin lives on the document. */}
         <PromptMentionMenu documentPath={file.path} workspacePath={basePath} />
         <EditorContent
           editor={editor}

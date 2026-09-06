@@ -4,8 +4,8 @@
  * link modal.
  */
 
-import { isTextFile } from "@/utils/fs";
-import { path as pathutil } from "@/utils/path";
+import { getDirectoryPath, isTextFile } from "@/utils/fs";
+import { path as pathutil, relativeTreePath } from "@/utils/path";
 
 /** URLs we open outside the app (OS browser / mail client). */
 export function isExternalUrl(url: string): boolean {
@@ -49,6 +49,25 @@ export function buildInternalCandidates(
     const rel = pathutil.relative(basePath, candidate);
     return rel !== undefined && rel !== "";
   });
+}
+
+/**
+ * The href a page link (MET-78's "@" suggestion) writes into the document,
+ * tree-domain ("/"-separated) like every markdown path: relative to the
+ * containing file when the target sits under its directory (the markdown
+ * convention, and buildInternalCandidates' first candidate), else
+ * workspace-root-relative (the image-drop precedent, covered by the
+ * resolver's fallback). Kept in this file so the writer of the convention
+ * sits beside its reader. `pathutil.relative` is containment-only, so
+ * upward targets never produce ".." chains.
+ */
+export function pageLinkHref(
+  filePath: string,
+  basePath: string,
+  relativePath: string,
+): string {
+  const target = pathutil.join(basePath, pathutil.fromTreePath(relativePath));
+  return relativeTreePath(getDirectoryPath(filePath), target) || relativePath;
 }
 
 /**
