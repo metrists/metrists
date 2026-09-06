@@ -522,6 +522,13 @@ pub async fn spawn_agent<R: tauri::Runtime>(
     // shim → claude CLI), not just the wrapper. See kill_process_group.
     #[cfg(unix)]
     cmd.process_group(0);
+    // CREATE_NO_WINDOW: a GUI-subsystem parent spawning a console-subsystem
+    // child (node, npx.cmd via cmd.exe) otherwise pops a visible console
+    // window whose close button kills the agent. The flag also covers the
+    // cmd.exe that std interposes for .cmd/.bat programs, and the child's
+    // own descendants inherit the windowless console.
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000 /* CREATE_NO_WINDOW */);
 
     // Replace PATH with the freshly-resolved value (login-shell probe on
     // macOS, registry read on Windows) so npx/node resolve.
