@@ -12,7 +12,17 @@ import {
   MarkdownImage,
   MarkdownCodeBlock,
 } from "@/components/editor/tiptap-editor-kit";
-import { editorWidgets, widgetRendererNodes } from "@notefig/widgets";
+import {
+  editorWidgets,
+  widgetRendererNodes,
+  widgetMinimapExtension,
+  registerPromptRoundObserver,
+} from "@notefig/widgets";
+import { observePromptRound } from "@/agent/round-observer";
+
+// The minimap's live-rows seam (MET-172): filled once, here, because this
+// module is where document editors are assembled.
+registerPromptRoundObserver(observePromptRound);
 import { lowlight } from "@/components/editor/editor-schema-kit";
 import {
   closeDocumentSync,
@@ -349,6 +359,9 @@ function createMarkdownInstance(
     // workspace; they also arm the prompt widget's empty-doc keeper
     // (unconfigured schema-only instances never self-insert).
     ...widgetRendererNodes({ filePath, basePath: workspaceRoot }),
+    // The document minimap rail (MET-172) — mounts its own UI inside the
+    // editor's scroll container; registering it is the installation.
+    widgetMinimapExtension(),
   ];
 
   const editor = new Editor({

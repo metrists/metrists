@@ -87,6 +87,21 @@ export {
   type PromptBlobRecord,
 } from "./prompt/store";
 
+/** The document minimap (MET-172): the collector the editor registers,
+ *  and the live-rows seam the app fills in at setup. */
+export { widgetMinimapExtension } from "./registry";
+export {
+  registerPromptRoundObserver,
+  type PromptRoundObserverFactory,
+  type PromptRoundSnapshot,
+} from "./prompt/minimap";
+export {
+  deriveMinimapEntries,
+  type MinimapDotState,
+  type MinimapEntry,
+  type MinimapSource,
+} from "./minimap/contract";
+
 /**
  * The translation keys this package resolves — the host application owns the
  * strings, and asserts against this list that it defines every one.
