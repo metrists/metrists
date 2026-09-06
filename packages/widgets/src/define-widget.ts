@@ -32,6 +32,7 @@
  *    app it runs in.
  */
 import type { Node } from "@tiptap/core";
+import type { MinimapSource } from "./minimap/contract";
 
 /**
  * A widget's markdown form, independent of Tiptap. `strip` answers "what
@@ -72,6 +73,13 @@ export interface EditorWidgetDefinition<Options = unknown> {
   readonly options?: Options;
   /** Present iff the widget persists to markdown. */
   codec?: WidgetMarkerCodec<unknown>;
+  /**
+   * The widget's presence on the document minimap (MET-172): a static
+   * entry derivation plus an optional live dot-state observer. The rail
+   * itself is generic (./minimap) and learns element types only through
+   * this slot, collected by the registry.
+   */
+  minimap?: MinimapSource;
   /**
    * True when the widget may stand in for a list item's leading paragraph —
    * i.e. it can be summoned inside a list. The host composes the widened

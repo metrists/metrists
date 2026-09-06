@@ -7,6 +7,8 @@
  */
 import type { EditorWidgetDefinition } from "./define-widget";
 import { promptWidget } from "./prompt";
+import { WidgetMinimapExtension } from "./minimap/extension";
+import type { MinimapSource } from "./minimap/contract";
 
 export const editorWidgets: EditorWidgetDefinition[] = [promptWidget];
 
@@ -36,4 +38,17 @@ export function widgetRendererNodes(options: {
     ...(widget.support?.views(options) ?? []),
     widget.view.configure(options),
   ]);
+}
+
+/**
+ * The document minimap, configured with every widget that declared a
+ * `minimap` slot. The rail mounts itself inside the editor (plugin view),
+ * so adding this to an editor's extensions is the whole installation.
+ */
+export function widgetMinimapExtension() {
+  const sources: Record<string, MinimapSource> = {};
+  for (const widget of editorWidgets) {
+    if (widget.minimap) sources[widget.name] = widget.minimap;
+  }
+  return WidgetMinimapExtension.configure({ sources });
 }

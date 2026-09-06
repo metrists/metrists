@@ -1,48 +1,58 @@
 /**
- * The minimap's derivations (MET-172): widget dots come straight from the
- * live doc — order, proportional position, the title chain (draft text
- * → last sent prompt → generic) — and each phase maps to one visual
- * treatment (core color, motion, tooltip phase line).
+ * The prompt widget's minimap declarations (MET-172): entry derivation
+ * (order, proportional position, the title chain) and the phase → dot
+ * treatment map (core = lifecycle, motion = attention).
  */
-import { describe, it, expect, afterEach } from "vitest";
-import { Editor } from "@tiptap/core";
-import { editorExtensions } from "@/components/editor/tiptap-editor-kit";
-import { widgetRendererNodes, updatePromptBlob } from "@notefig/widgets";
-import {
-  deriveWidgetMapEntries,
-  describeDotState,
-} from "@/components/editor/widget-minimap-state";
+import { describe, expect, it } from "vitest";
+import { getSchema } from "@tiptap/core";
+import StarterKit from "@tiptap/starter-kit";
+import type { Schema, Node as PMNode } from "@tiptap/pm/model";
+import { deriveMinimapEntries } from "../../minimap/contract";
+import { AiPromptNodeBase, PromptDraftNodeBase } from "../node";
+import { promptMentionNode } from "../composer/mention-node";
+import { describeDotState, promptMinimapSource } from "../minimap";
+import { updatePromptBlob } from "../store";
 
-const WIDGET_HTML = (blobId: string, draft = "") =>
-  `<div data-type="ai-prompt" data-blob-id="${blobId}" data-task-id="task_${blobId}">${
-    draft ? `<div data-type="prompt-draft">${draft}</div>` : ""
-  }</div>`;
+const schema: Schema = getSchema([
+  StarterKit,
+  AiPromptNodeBase,
+  PromptDraftNodeBase,
+  promptMentionNode(),
+]);
 
-function makeEditor(content: string): Editor {
-  return new Editor({
-    extensions: [
-      ...editorExtensions.filter((e) => e.name !== "aiPrompt"),
-      ...widgetRendererNodes({ filePath: "/ws/doc.md", basePath: "/ws" }),
-    ],
-    content,
-  });
+const sources = { aiPrompt: promptMinimapSource };
+
+function widget(blobId: string, draft = ""): PMNode {
+  return schema.nodes.aiPrompt.create(
+    { blobId, taskId: `task_${blobId}` },
+    schema.nodes.promptDraft.create(
+      null,
+      draft ? [schema.text(draft)] : [],
+    ),
+  );
 }
 
-let editor: Editor | null = null;
-afterEach(() => {
-  editor?.destroy();
-  editor = null;
-});
+function para(text: string): PMNode {
+  return schema.nodes.paragraph.create(null, [schema.text(text)]);
+}
 
-describe("deriveWidgetMapEntries", () => {
+function doc(...children: PMNode[]): PMNode {
+  return schema.nodes.doc.create(null, children);
+}
+
+describe("deriveMinimapEntries", () => {
   it("maps widgets in document order with proportional, clamped ratios", () => {
     const paras = (n: number) =>
-      Array.from({ length: n }, (_, i) => `<p>para ${i}</p>`).join("");
-    editor = makeEditor(
-      `${WIDGET_HTML("blob_top")}${paras(20)}${WIDGET_HTML("blob_mid")}${paras(20)}${WIDGET_HTML("blob_end")}`,
+      Array.from({ length: n }, (_, i) => para(`para ${i}`));
+    const d = doc(
+      widget("blob_top"),
+      ...paras(20),
+      widget("blob_mid"),
+      ...paras(20),
+      widget("blob_end"),
     );
-    const entries = deriveWidgetMapEntries(editor.state.doc);
-    expect(entries.map((e) => e.blobId)).toEqual([
+    const entries = deriveMinimapEntries(d, sources);
+    expect(entries.map((e) => e.key.split(":")[1])).toEqual([
       "blob_top",
       "blob_mid",
       "blob_end",
@@ -57,34 +67,65 @@ describe("deriveWidgetMapEntries", () => {
 
   it("titles from draft text, then last sent prompt, then a generic label", () => {
     updatePromptBlob("blob_sent", { lastSentPrompt: "summarize the doc" });
-    editor = makeEditor(
-      `${WIDGET_HTML("blob_draft", "half typed")}<p>x</p>${WIDGET_HTML("blob_sent")}<p>y</p>${WIDGET_HTML("blob_blank")}`,
+    const d = doc(
+      widget("blob_draft", "half typed"),
+      para("x"),
+      widget("blob_sent"),
+      para("y"),
+      widget("blob_blank"),
     );
-    const titles = deriveWidgetMapEntries(editor.state.doc).map((e) => e.title);
+    const titles = deriveMinimapEntries(d, sources).map((e) => e.title);
     expect(titles).toEqual(["half typed", "summarize the doc", "Prompt"]);
   });
 
   it("truncates long titles with an ellipsis", () => {
     const long = "word ".repeat(30).trim();
-    editor = makeEditor(WIDGET_HTML("blob_l", long));
-    const [entry] = deriveWidgetMapEntries(editor.state.doc);
+    const [entry] = deriveMinimapEntries(doc(widget("blob_l", long)), sources);
     expect(entry.title.length).toBeLessThanOrEqual(49);
     expect(entry.title.endsWith("…")).toBe(true);
   });
 
-  it("gives duplicated markers (same blobId) distinct keys", () => {
+  it("gives duplicated markers (same blobId) distinct keys sharing identity", () => {
     // External edits can copy-paste a marker; parsing doesn't dedupe.
-    editor = makeEditor(
-      `${WIDGET_HTML("blob_dup")}<p>between</p>${WIDGET_HTML("blob_dup")}`,
-    );
-    const entries = deriveWidgetMapEntries(editor.state.doc);
+    const d = doc(widget("blob_dup"), para("between"), widget("blob_dup"));
+    const entries = deriveMinimapEntries(d, sources);
     expect(entries).toHaveLength(2);
     expect(new Set(entries.map((e) => e.key)).size).toBe(2);
+    expect(new Set(entries.map((e) => e.observerKey)).size).toBe(1);
+  });
+
+  it("spreads crowded dots to a minimum separation, preserving order", () => {
+    // Three adjacent widgets at the very top of a long document would
+    // otherwise land within a couple pixels of each other.
+    const filler = Array.from({ length: 60 }, (_, i) => para(`filler ${i}`));
+    const d = doc(
+      widget("blob_a"),
+      widget("blob_b"),
+      widget("blob_c"),
+      ...filler,
+    );
+    const entries = deriveMinimapEntries(d, sources);
+    const ratios = entries.map((e) => e.ratio);
+    expect(ratios[1] - ratios[0]).toBeGreaterThanOrEqual(0.069);
+    expect(ratios[2] - ratios[1]).toBeGreaterThanOrEqual(0.069);
+    // ≥ RATIO_LO up to float noise from the backward pass.
+    expect(ratios[0]).toBeGreaterThanOrEqual(0.0099);
+    expect(ratios[2]).toBeLessThanOrEqual(0.99);
+  });
+
+  it("compresses the gap instead of overflowing when the rail is full", () => {
+    const many = Array.from({ length: 30 }, (_, i) => widget(`blob_m${i}`));
+    const entries = deriveMinimapEntries(doc(...many), sources);
+    const ratios = entries.map((e) => e.ratio);
+    for (let i = 1; i < ratios.length; i++) {
+      expect(ratios[i]).toBeGreaterThan(ratios[i - 1]);
+    }
+    expect(ratios[0]).toBeGreaterThanOrEqual(0.0099);
+    expect(ratios[ratios.length - 1]).toBeLessThanOrEqual(0.99);
   });
 
   it("returns nothing for a widget-less document", () => {
-    editor = makeEditor("<p>just prose</p>");
-    expect(deriveWidgetMapEntries(editor.state.doc)).toEqual([]);
+    expect(deriveMinimapEntries(doc(para("just prose")), sources)).toEqual([]);
   });
 });
 
