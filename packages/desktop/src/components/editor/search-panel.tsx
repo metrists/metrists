@@ -7,6 +7,7 @@ import {
   forwardRef,
 } from "react";
 import { useKeyHold } from "@tanstack/react-hotkeys";
+import { useTranslation } from "react-i18next";
 import {
   Search,
   X,
@@ -39,6 +40,7 @@ export interface SearchPanelHandle {
 
 export const SearchPanel = forwardRef<SearchPanelHandle, SearchPanelProps>(
   function SearchPanel({ workspacePath }, ref) {
+    const { t } = useTranslation();
     const isMetaHeld = useKeyHold("Meta");
     const isControlHeld = useKeyHold("Control");
     const isModHeld = isMetaHeld || isControlHeld;
@@ -161,7 +163,7 @@ export const SearchPanel = forwardRef<SearchPanelHandle, SearchPanelProps>(
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search"
+              placeholder={t("search")}
               className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground text-sm min-w-0"
             />
             <button
@@ -172,7 +174,7 @@ export const SearchPanel = forwardRef<SearchPanelHandle, SearchPanelProps>(
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:text-foreground",
               )}
-              title="Match case"
+              title={t("matchCase")}
             >
               <CaseSensitive className="w-4 h-4" />
             </button>
@@ -180,7 +182,7 @@ export const SearchPanel = forwardRef<SearchPanelHandle, SearchPanelProps>(
               <button
                 onClick={handleClear}
                 className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                title="Clear search"
+                title={t("clearSearch")}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -200,7 +202,7 @@ export const SearchPanel = forwardRef<SearchPanelHandle, SearchPanelProps>(
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
-            title="Toggle filters"
+            title={t("toggleFilters")}
           >
             <SlidersHorizontal className="w-4 h-4" />
           </button>
@@ -212,7 +214,7 @@ export const SearchPanel = forwardRef<SearchPanelHandle, SearchPanelProps>(
               type="text"
               value={filePattern}
               onChange={(e) => setFilePattern(e.target.value)}
-              placeholder="File filter (e.g. *.md)"
+              placeholder={t("fileFilterPlaceholder")}
               className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
@@ -222,11 +224,11 @@ export const SearchPanel = forwardRef<SearchPanelHandle, SearchPanelProps>(
           <div className="flex items-center px-2 py-1 text-xs text-muted-foreground">
             {isSearching ? (
               <span className="inline-flex items-center gap-1">
-                searching
+                {t("searching")}
                 <span className="animate-pulse">...</span>
               </span>
             ) : (
-              `${resultCount} result${resultCount !== 1 ? "s" : ""} in ${fileCount} file${fileCount !== 1 ? "s" : ""}`
+              `${t("searchResultCount", { count: resultCount })} ${t("searchFileCount", { count: fileCount })}`
             )}
           </div>
         )}
@@ -279,7 +281,7 @@ export const SearchPanel = forwardRef<SearchPanelHandle, SearchPanelProps>(
 
           {!isSearching && query.trim() && resultCount === 0 && !error && (
             <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-              No results found
+              {t("noResultsFound")}
             </div>
           )}
         </ScrollArea>

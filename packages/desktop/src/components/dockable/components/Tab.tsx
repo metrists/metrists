@@ -1,5 +1,6 @@
 import SortableItem from "../dndkit/SortableItem";
 import { cn } from "@notefig/ui/utils";
+import { useTranslation } from "react-i18next";
 
 function Tab({
   name,
@@ -18,6 +19,7 @@ function Tab({
   parentId: string;
   address: number[];
 }) {
+  const { t } = useTranslation();
   return (
     <SortableItem
       key={id}
@@ -69,7 +71,7 @@ function Tab({
                 e.stopPropagation();
                 onClose();
               }}
-              aria-label="Close tab"
+              aria-label={t("closeTab")}
             >
               <svg
                 width="14"

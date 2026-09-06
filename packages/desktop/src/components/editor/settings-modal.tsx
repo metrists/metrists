@@ -75,11 +75,12 @@ interface SettingsSectionDefinition {
  * left rail is an index into this list, not a router.
  */
 const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
-  { id: "general", label: "General", icon: Settings },
-  { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "hotkeys", label: "Hotkeys", icon: Keyboard },
-  { id: "harnesses", label: "Harnesses", icon: Sparkles },
-  { id: "privacy", label: "Privacy", icon: Shield },
+  // `label` holds an i18n key, resolved where the rail renders.
+  { id: "general", label: "general", icon: Settings },
+  { id: "appearance", label: "appearance", icon: Palette },
+  { id: "hotkeys", label: "hotkeys", icon: Keyboard },
+  { id: "harnesses", label: "harnessSettingsTitle", icon: Sparkles },
+  { id: "privacy", label: "privacySettings", icon: Shield },
 ];
 
 export const DEFAULT_SETTINGS_SECTION = SETTINGS_SECTIONS[0].id;
@@ -103,6 +104,7 @@ export function SettingsModal({
   onDirectionChange,
   onFocusTab,
 }: SettingsModalProps) {
+  const { t } = useTranslation();
   const { value: sectionParam, setValue: setSectionParam } =
     useSearchParamValue("settings", { replace: true });
   const isSettingsOpen = sectionParam !== null;
@@ -161,7 +163,7 @@ export function SettingsModal({
         className="max-w-6xl w-[95vw] h-[85vh] p-0 gap-0 overflow-hidden bg-card border-border texture-surface focus:outline-none focus-visible:outline-none"
         onCloseAutoFocus={handleCloseAutoFocus}
       >
-        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <DialogTitle className="sr-only">{t("settings")}</DialogTitle>
 
         <div dir={direction} className="flex h-full overflow-hidden">
           <div className="w-56 shrink-0 border-e border-border bg-sidebar">
@@ -180,7 +182,7 @@ export function SettingsModal({
           </div>
 
           <ScrollArea ref={setContainer} className="flex-1 min-w-0 px-6">
-            <SettingsSection id="general" title="General">
+            <SettingsSection id="general" title={t("general")}>
               <GeneralSettings
                 settings={settings}
                 setSettings={setSettings}
@@ -189,7 +191,7 @@ export function SettingsModal({
               />
             </SettingsSection>
 
-            <SettingsSection id="appearance" title="Appearance">
+            <SettingsSection id="appearance" title={t("appearance")}>
               <AppearanceSettings />
             </SettingsSection>
 
@@ -220,6 +222,7 @@ function SettingsIndexItem({
   active: boolean;
   onSelect: () => void;
 }) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -240,7 +243,7 @@ function SettingsIndexItem({
       )}
     >
       <section.icon className="h-4 w-4 shrink-0" />
-      <span className="truncate">{section.label}</span>
+      <span className="truncate">{t(section.label)}</span>
     </button>
   );
 }
@@ -288,11 +291,12 @@ function GeneralSettings({
   direction: "ltr" | "rtl";
   onDirectionChange: (direction: "ltr" | "rtl") => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <UpdateSection />
 
-      <SettingRow title="Language" description="Change the display language.">
+      <SettingRow title={t("language")} description={t("languageDesc")}>
         <Select
           value={settings.language}
           onValueChange={(value) =>
@@ -303,20 +307,20 @@ function GeneralSettings({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="english">English</SelectItem>
-            <SelectItem value="spanish">Spanish</SelectItem>
-            <SelectItem value="french">French</SelectItem>
-            <SelectItem value="german">German</SelectItem>
-            <SelectItem value="japanese">Japanese</SelectItem>
-            <SelectItem value="arabic">Arabic</SelectItem>
-            <SelectItem value="hebrew">Hebrew</SelectItem>
+            <SelectItem value="english">{t("english")}</SelectItem>
+            <SelectItem value="spanish">{t("spanish")}</SelectItem>
+            <SelectItem value="french">{t("french")}</SelectItem>
+            <SelectItem value="german">{t("german")}</SelectItem>
+            <SelectItem value="japanese">{t("japanese")}</SelectItem>
+            <SelectItem value="arabic">{t("arabic")}</SelectItem>
+            <SelectItem value="hebrew">{t("hebrew")}</SelectItem>
           </SelectContent>
         </Select>
       </SettingRow>
 
       <SettingRow
-        title="Text direction"
-        description="Control the layout direction of the entire application."
+        title={t("textDirection")}
+        description={t("textDirectionDesc")}
       >
         <Select
           value={direction}
@@ -326,8 +330,8 @@ function GeneralSettings({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ltr">Left to Right</SelectItem>
-            <SelectItem value="rtl">Right to Left</SelectItem>
+            <SelectItem value="ltr">{t("leftToRight")}</SelectItem>
+            <SelectItem value="rtl">{t("rightToLeft")}</SelectItem>
           </SelectContent>
         </Select>
       </SettingRow>
@@ -335,7 +339,7 @@ function GeneralSettings({
       <ScratchpadOnStartupToggle />
 
       <div className="pt-4">
-        <h2 className="text-lg font-semibold mb-1">Advanced</h2>
+        <h2 className="text-lg font-semibold mb-1">{t("advanced")}</h2>
         <DebugModeToggle />
       </div>
     </div>
@@ -343,6 +347,7 @@ function GeneralSettings({
 }
 
 function AppearanceSettings() {
+  const { t: translate } = useTranslation();
   const { setTheme, theme } = useTheme();
   const { setTheme: persistTheme } = useAppSettings();
 
@@ -355,17 +360,17 @@ function AppearanceSettings() {
   return (
     <div className="space-y-2">
       <SettingRow
-        title="Theme"
-        description="Choose a color theme for the interface."
+        title={translate("theme")}
+        description={translate("themeDesc")}
       >
         <Select value={theme} onValueChange={handleThemeChange}>
           <SelectTrigger className="w-32">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="dark">Dark</SelectItem>
-            <SelectItem value="light">Light</SelectItem>
-            <SelectItem value="system">System</SelectItem>
+            <SelectItem value="dark">{translate("dark")}</SelectItem>
+            <SelectItem value="light">{translate("light")}</SelectItem>
+            <SelectItem value="system">{translate("system")}</SelectItem>
           </SelectContent>
         </Select>
       </SettingRow>
@@ -662,6 +667,7 @@ function ScratchpadOnStartupToggle() {
 }
 
 function DebugModeToggle() {
+  const { t } = useTranslation();
   const { isOn: isDebugActive, setFlag: handleToggle } = useSearchParamFlag(
     "debug",
     { replace: true },
@@ -669,8 +675,8 @@ function DebugModeToggle() {
 
   return (
     <SettingRow
-      title="Debug mode"
-      description="Show the debug panel with route state, URL editor, and console capture."
+      title={t("debugMode")}
+      description={t("debugModeDesc")}
     >
       <Switch checked={isDebugActive} onCheckedChange={handleToggle} />
     </SettingRow>

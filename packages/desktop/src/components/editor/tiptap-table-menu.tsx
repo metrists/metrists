@@ -1,5 +1,6 @@
 import { BubbleMenu } from "@tiptap/react/menus";
 import { Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Editor } from "@tiptap/core";
 
 const preventFocusLoss = (e: React.MouseEvent) => e.preventDefault();
@@ -88,6 +89,7 @@ const DeleteColumnIcon = () => (
 );
 
 export function TableMenu({ editor }: TableMenuProps) {
+  const { t } = useTranslation();
   return (
     <BubbleMenu
       editor={editor}
@@ -103,7 +105,7 @@ export function TableMenu({ editor }: TableMenuProps) {
             editor.chain().focus().addRowAfter().run()
           }
           onMouseDown={preventFocusLoss}
-          title="Insert row after"
+          title={t("insertRowAfter")}
         >
           <InsertRowIcon />
         </button>
@@ -113,7 +115,7 @@ export function TableMenu({ editor }: TableMenuProps) {
             editor.chain().focus().addColumnAfter().run()
           }
           onMouseDown={preventFocusLoss}
-          title="Insert column after"
+          title={t("insertColumnAfter")}
         >
           <InsertColumnIcon />
         </button>
@@ -123,7 +125,7 @@ export function TableMenu({ editor }: TableMenuProps) {
             editor.chain().focus().deleteRow().run()
           }
           onMouseDown={preventFocusLoss}
-          title="Delete row"
+          title={t("deleteRow")}
         >
           <DeleteRowIcon />
         </button>
@@ -133,7 +135,7 @@ export function TableMenu({ editor }: TableMenuProps) {
             editor.chain().focus().deleteColumn().run()
           }
           onMouseDown={preventFocusLoss}
-          title="Delete column"
+          title={t("deleteColumn")}
         >
           <DeleteColumnIcon />
         </button>
@@ -143,7 +145,7 @@ export function TableMenu({ editor }: TableMenuProps) {
             editor.chain().focus().deleteTable().run()
           }
           onMouseDown={preventFocusLoss}
-          title="Delete table"
+          title={t("deleteTable")}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>

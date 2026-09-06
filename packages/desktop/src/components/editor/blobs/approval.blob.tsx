@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { z } from "zod";
 import { defineBlobType } from "./blob-type";
@@ -18,6 +19,7 @@ export default defineBlobType({
     decision: z.enum(["approved", "rejected"]).optional(),
   }),
   Widget({ blob, payload, answer }) {
+    const { t } = useTranslation();
     const { state, run } = useBlobAnswer(answer);
     // Track the clicked decision so the spinner shows on that button only.
     const [submitting, setSubmitting] = useState<"approved" | "rejected" | null>(
@@ -46,7 +48,7 @@ export default defineBlobType({
         <div className="mb-2 font-medium">{payload.prompt}</div>
         {payload.details && (
           <details className="mb-2 text-xs text-muted-foreground">
-            <summary className="cursor-pointer">Details</summary>
+            <summary className="cursor-pointer">{t("details")}</summary>
             <p className="mt-1 whitespace-pre-wrap">{payload.details}</p>
           </details>
         )}
@@ -55,7 +57,7 @@ export default defineBlobType({
             {pending && submitting === "approved" && (
               <Loader2 className="mr-1.5 size-3.5 animate-spin" />
             )}
-            Approve
+            {t("approve")}
           </Button>
           <Button
             size="sm"
@@ -66,17 +68,17 @@ export default defineBlobType({
             {pending && submitting === "rejected" && (
               <Loader2 className="mr-1.5 size-3.5 animate-spin" />
             )}
-            Reject
+            {t("reject")}
           </Button>
         </div>
         {state === "not_found" && (
           <div className="mt-2 text-xs text-muted-foreground">
-            This approval was changed or removed — reload the document.
+            {t("approvalChangedReload")}
           </div>
         )}
         {state === "conflict" && (
           <div className="mt-2 text-xs text-muted-foreground">
-            Someone else answered this — refresh to see the current state.
+            {t("blobAnsweredConflict")}
           </div>
         )}
       </div>

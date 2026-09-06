@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Minus, Square, X } from "lucide-react";
 import { getDesktopOs } from "@/utils/platform";
@@ -95,6 +96,7 @@ function MacTitlebarSpacer() {
 // low-contrast (no border, background matches the app) so it reads as part
 // of the app's own chrome rather than a bolted-on OS title bar.
 function WindowsTitlebar() {
+  const { t } = useTranslation();
   const ref = useTitlebarHeightVar<HTMLDivElement>();
 
   async function minimize() {
@@ -125,7 +127,7 @@ function WindowsTitlebar() {
       >
         <button
           type="button"
-          aria-label="Minimize"
+          aria-label={t("minimize")}
           onClick={minimize}
           className={buttonClass}
         >
@@ -133,7 +135,7 @@ function WindowsTitlebar() {
         </button>
         <button
           type="button"
-          aria-label="Maximize"
+          aria-label={t("maximize")}
           onClick={toggleMaximize}
           className={buttonClass}
         >
@@ -141,7 +143,7 @@ function WindowsTitlebar() {
         </button>
         <button
           type="button"
-          aria-label="Close"
+          aria-label={t("close")}
           onClick={close}
           className={`${buttonClass} hover:bg-destructive hover:text-destructive-foreground`}
         >

@@ -16,6 +16,7 @@
  * normal history transaction the autosave path treats like typing.
  */
 import { useEffect, useRef, useState, type FocusEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import {
@@ -193,6 +194,7 @@ export function FrontmatterEditor({
   yaml: string;
   onChange: (yaml: string) => void;
 }) {
+  const { t } = useTranslation();
   const { structured, parseError, rows } = analyzeFrontmatter(yaml);
   const keys = rows.map((r) => r.key);
 
@@ -217,9 +219,9 @@ export function FrontmatterEditor({
   return (
     <div className="flex w-full flex-col">
       <div className="px-1.5 pt-0.5 pb-2">
-        <div className="text-xs font-medium">Properties</div>
+        <div className="text-xs font-medium">{t("properties")}</div>
         <div className="pt-0.5 text-xs text-muted-foreground">
-          Stored as frontmatter in this file
+          {t("propertiesStoredInFile")}
         </div>
       </div>
 
@@ -292,7 +294,7 @@ export function FrontmatterEditor({
 
           {rows.length === 0 && (
             <p className="px-1.5 pb-1 text-xs text-muted-foreground">
-              No properties yet — name one to get started.
+              {t("noPropertiesYet")}
             </p>
           )}
           <NewPropertyRow existingKeys={keys} onCommit={setKey} />
@@ -314,6 +316,7 @@ function NewPropertyRow({
   existingKeys: string[];
   onCommit: (key: string, value: unknown) => void;
 }) {
+  const { t } = useTranslation();
   const [key, setKey] = useState("");
   const [value, setValue] = useState("");
 
@@ -352,8 +355,8 @@ function NewPropertyRow({
           className="h-4 w-4 shrink-0 text-muted-foreground/40"
         />
         <input
-          placeholder="name"
-          aria-label="New property name"
+          placeholder={t("propertyNamePlaceholder")}
+          aria-label={t("newPropertyName")}
           spellCheck={false}
           value={key}
           onChange={(event) => setKey(event.target.value)}
@@ -361,8 +364,8 @@ function NewPropertyRow({
         />
       </div>
       <input
-        placeholder="value"
-        aria-label="New property value"
+        placeholder={t("propertyValuePlaceholder")}
+        aria-label={t("newPropertyValue")}
         spellCheck={false}
         value={value}
         onChange={(event) => setValue(event.target.value)}

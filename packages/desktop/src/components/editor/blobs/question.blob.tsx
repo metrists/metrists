@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { z } from "zod";
 import { defineBlobType } from "./blob-type";
@@ -25,6 +26,7 @@ export default defineBlobType({
     answer: z.string().optional(),
   }),
   Widget({ blob, payload, answer }) {
+    const { t } = useTranslation();
     const { state, run } = useBlobAnswer(answer);
     const [freeText, setFreeText] = useState("");
     // Which control is mid-submit, so the spinner lands on the one the user
@@ -83,29 +85,29 @@ export default defineBlobType({
               value={freeText}
               onChange={(e) => setFreeText(e.target.value)}
               disabled={pending}
-              placeholder="Type an answer…"
+              placeholder={t("blobAnswerPlaceholder")}
               className="h-8"
             />
             <Button type="submit" size="sm" disabled={pending || !freeText.trim()}>
               {pending ? (
                 <>
                   <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                  Sending…
+                  {t("sending")}
                 </>
               ) : (
-                "Send"
+                t("send")
               )}
             </Button>
           </form>
         )}
         {state === "not_found" && (
           <div className="mt-2 text-xs text-muted-foreground">
-            This question was changed or removed — reload the document.
+            {t("questionChangedReload")}
           </div>
         )}
         {state === "conflict" && (
           <div className="mt-2 text-xs text-muted-foreground">
-            Someone else answered this — refresh to see the current state.
+            {t("blobAnsweredConflict")}
           </div>
         )}
       </div>

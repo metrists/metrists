@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   FileText,
@@ -29,6 +30,7 @@ export const IconSidebar = memo(function IconSidebar({
   isCollapsed,
   onToggleCollapse,
 }: IconSidebarProps) {
+  const { t } = useTranslation();
   const [searchParams, setUrlSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const sidebarView = searchParams.get("sidebarView") || "files";
@@ -63,33 +65,33 @@ export const IconSidebar = memo(function IconSidebar({
       {
         id: "files",
         icon: FileText,
-        label: "Files",
+        label: t("files"),
         active: sidebarView === "files",
         onClick: () => handleSidebarViewChange("files"),
       },
       {
         id: "search",
         icon: Search,
-        label: "Search",
+        label: t("search"),
         active: sidebarView === "search",
         onClick: () => handleSidebarViewChange("search"),
       },
       {
         id: "git",
         icon: GitBranch,
-        label: "Git",
+        label: t("git"),
         active: sidebarView === "git",
         onClick: () => handleSidebarViewChange("git"),
       },
       {
         id: "sessions",
         icon: Sparkles,
-        label: "Agent Sessions",
+        label: t("agentSessionsFull"),
         active: sidebarView === "sessions",
         onClick: () => handleSidebarViewChange("sessions"),
       },
     ],
-    [sidebarView, handleSidebarViewChange],
+    [sidebarView, handleSidebarViewChange, t],
   );
 
   const { setValue: setSettingsSection } = useSearchParamValue("settings");
@@ -99,11 +101,11 @@ export const IconSidebar = memo(function IconSidebar({
       {
         id: "settings",
         icon: Settings,
-        label: "Settings",
+        label: t("settings"),
         onClick: () => setSettingsSection(DEFAULT_SETTINGS_SECTION),
       },
     ],
-    [setSettingsSection],
+    [setSettingsSection, t],
   );
 
   return (
@@ -127,10 +129,10 @@ export const IconSidebar = memo(function IconSidebar({
           </button>
         </TooltipTrigger>
         <TooltipContent side="right" className="rtl:hidden" sideOffset={8}>
-          Go to Welcome Page
+          {t("goToWelcomePage")}
         </TooltipContent>
         <TooltipContent side="left" className="ltr:hidden" sideOffset={8}>
-          Go to Welcome Page
+          {t("goToWelcomePage")}
         </TooltipContent>
       </Tooltip>
       <div className="flex flex-col items-center gap-1">
@@ -151,15 +153,15 @@ export const IconSidebar = memo(function IconSidebar({
                 <PanelLeftClose className="w-4 h-4 text-muted-foreground" />
               )}
               <span className="sr-only">
-                {isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                {isCollapsed ? t("expandSidebar") : t("collapseSidebar")}
               </span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="right" className="rtl:hidden" sideOffset={8}>
-            {isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            {isCollapsed ? t("expandSidebar") : t("collapseSidebar")}
           </TooltipContent>
           <TooltipContent side="left" className="ltr:hidden" sideOffset={8}>
-            {isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            {isCollapsed ? t("expandSidebar") : t("collapseSidebar")}
           </TooltipContent>
         </Tooltip>
         {bottomIcons.map((item) => (

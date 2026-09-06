@@ -447,7 +447,7 @@ export function CommandPalette({
             <button
               onClick={() => onOpenChange(false)}
               className="absolute top-1/2 end-3 -translate-y-1/2 p-1 rounded hover:bg-accent transition-colors"
-              aria-label="Close command palette"
+              aria-label={t("closeCommandPalette")}
             >
               <X className="size-4 text-muted-foreground" />
             </button>

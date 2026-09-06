@@ -3,6 +3,8 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { Titlebar } from "@/components/titlebar";
+// Initializes the shared i18n instance so t() resolves the English strings.
+import "@/utils/intl";
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({

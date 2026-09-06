@@ -390,6 +390,74 @@ i18n
           // Help Commands
           documentation: "Documentation",
 
+          // Window controls (Windows titlebar)
+          minimize: "Minimize",
+          maximize: "Maximize",
+
+          // Icon Sidebar
+          goToWelcomePage: "Go to Welcome Page",
+          files: "Files",
+          git: "Git",
+          agentSessionsFull: "Agent Sessions",
+
+          // Advanced settings
+          debugMode: "Debug mode",
+          debugModeDesc:
+            "Show the debug panel with route state, URL editor, and console capture.",
+
+          // Editor link bubble menu
+          openInBrowser: "Open in browser \u2014 {{href}}",
+          editLink: "Edit link",
+          removeLink: "Remove link",
+          linkFileNotFound: "File not found: {{href}}",
+          linkCannotOpenInEditor: "\"{{href}}\" can't be opened in the editor",
+
+          // Editor table bubble menu
+          insertRowAfter: "Insert row after",
+          insertColumnAfter: "Insert column after",
+          deleteRow: "Delete row",
+          deleteColumn: "Delete column",
+          deleteTable: "Delete table",
+
+          // Frontmatter properties popover
+          properties: "Properties",
+          propertiesStoredInFile: "Stored as frontmatter in this file",
+          noPropertiesYet: "No properties yet \u2014 name one to get started.",
+          newPropertyName: "New property name",
+          newPropertyValue: "New property value",
+          propertyNamePlaceholder: "name",
+          propertyValuePlaceholder: "value",
+
+          // Command palette chrome
+          closeCommandPalette: "Close command palette",
+
+          // Search panel
+          search: "Search",
+          matchCase: "Match case",
+          clearSearch: "Clear search",
+          toggleFilters: "Toggle filters",
+          fileFilterPlaceholder: "File filter (e.g. *.md)",
+          searching: "searching",
+          searchResultCount_one: "{{count}} result",
+          searchResultCount_other: "{{count}} results",
+          searchFileCount_one: "in {{count}} file",
+          searchFileCount_other: "in {{count}} files",
+          noResultsFound: "No results found",
+
+          // Interactive blobs (question / approval)
+          blobAnswerPlaceholder: "Type an answer\u2026",
+          send: "Send",
+          sending: "Sending\u2026",
+          approve: "Approve",
+          reject: "Reject",
+          details: "Details",
+          questionChangedReload:
+            "This question was changed or removed \u2014 reload the document.",
+          approvalChangedReload:
+            "This approval was changed or removed \u2014 reload the document.",
+          blobAnsweredConflict:
+            "Someone else answered this \u2014 refresh to see the current state.",
+
           // Agent UI — sessions sidebar panel
           agentSessions: "Sessions",
           agentNewSession: "New session",

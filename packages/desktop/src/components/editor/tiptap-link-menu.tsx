@@ -3,6 +3,7 @@ import { useEditorState } from "@tiptap/react";
 import { ExternalLink, FileText, Link, Unlink } from "lucide-react";
 import type { Editor } from "@tiptap/core";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { getDirectoryPath } from "@/utils/fs";
 import { platformAdapter } from "@/adapters";
 import { useWorkspaceTabs } from "@/components/workspace-tabs-provider";
@@ -23,6 +24,7 @@ export function LinkBubbleMenu({
   basePath,
   filePath,
 }: LinkBubbleMenuProps) {
+  const { t } = useTranslation();
   const { openFile } = useWorkspaceTabs();
   // Subscribe to editor state — a plain getAttributes() read at render time
   // goes stale because nothing re-renders this component on selection change.
@@ -52,11 +54,11 @@ export function LinkBubbleMenu({
     );
 
     if (!target) {
-      toast.error(`File not found: ${href}`);
+      toast.error(t("linkFileNotFound", { href }));
       return;
     }
     if (!openFile({ tabId: target, intent: "new-tab" })) {
-      toast.error(`"${href}" can't be opened in the editor`);
+      toast.error(t("linkCannotOpenInEditor", { href }));
     }
   };
 
@@ -70,7 +72,9 @@ export function LinkBubbleMenu({
           className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           onClick={handleOpen}
           onMouseDown={preventFocusLoss}
-          title={isExternal ? `Open in browser — ${href}` : "Open in new tab"}
+          title={
+            isExternal ? t("openInBrowser", { href }) : t("openInNewTab")
+          }
         >
           {/* Show the full href: stripping the scheme would disguise an
               external "https://notes.md" as an internal-looking filename. */}
@@ -85,7 +89,7 @@ export function LinkBubbleMenu({
           className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           onClick={onEdit}
           onMouseDown={preventFocusLoss}
-          title="Edit link"
+          title={t("editLink")}
         >
           <Link className="h-3.5 w-3.5" />
         </button>
@@ -95,7 +99,7 @@ export function LinkBubbleMenu({
             editor.chain().focus().extendMarkRange("link").unsetLink().run();
           }}
           onMouseDown={preventFocusLoss}
-          title="Remove link"
+          title={t("removeLink")}
         >
           <Unlink className="h-3.5 w-3.5" />
         </button>
