@@ -10,9 +10,9 @@
  * So the plugin's options are stable forwarders that read this registry at
  * call time, and `PromptMentionMenu` — a React component mounted next to
  * the editor, inside the host provider — registers the real service on
- * mount. A suggestion can only start inside a prompt draft, and a document
- * showing a draft is a document whose menu is mounted, so the registry is
- * populated whenever it is consulted.
+ * mount. The menu is mounted for every document on screen — the app's
+ * page-link suggestion forwards here too, not just the draft-scoped
+ * mention — so the registry is populated whenever it is consulted.
  *
  * Keyed by document path, like the app's own editor instances: one live
  * editor per file, and its menu outlives nothing.

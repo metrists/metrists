@@ -17,6 +17,7 @@ import {
   widgetRendererNodes,
   widgetMinimapExtension,
   registerPromptRoundObserver,
+  PageLinkSuggestion,
 } from "@notefig/widgets";
 import { observePromptRound } from "@/agent/round-observer";
 
@@ -42,6 +43,7 @@ import {
 } from "@/tabs/tab-controllers";
 import type { TabKind } from "@/tabs/tab-id";
 import { resolveSearchTarget, type SearchTarget } from "./editor-position";
+import { pageLinkHref } from "./tiptap-link-utils";
 import { platformAdapter } from "@/adapters";
 import { getDirectoryPath } from "@/utils/fs";
 import {
@@ -359,6 +361,14 @@ function createMarkdownInstance(
     // workspace; they also arm the prompt widget's empty-doc keeper
     // (unconfigured schema-only instances never self-insert).
     ...widgetRendererNodes({ filePath, basePath: workspaceRoot }),
+    // "@" page links (MET-78) in ordinary prose — the complement of the
+    // prompt widget's draft-scoped mention suggestion, sharing its popup.
+    // The href policy is the app's (tiptap-link-utils), injected whole.
+    PageLinkSuggestion.configure({
+      documentPath: filePath,
+      buildHref: (relativePath) =>
+        pageLinkHref(filePath, workspaceRoot, relativePath),
+    }),
     // The document minimap rail (MET-172) — mounts its own UI inside the
     // editor's scroll container; registering it is the installation.
     widgetMinimapExtension(),

@@ -79,6 +79,15 @@ export {
   type MentionService,
 } from "./prompt/composer/mention-bridge";
 
+/** "@" page links (MET-78) for the host editor's ordinary prose — the
+ *  complement of the widget's draft-scoped mention suggestion, sharing its
+ *  popup service. The application injects its href policy via `buildHref`. */
+export {
+  PageLinkSuggestion,
+  pageLinkLabel,
+  type PageLinkSuggestionOptions,
+} from "./page-link";
+
 /** Widget state the app reaches into. */
 export {
   getPromptBlob,
