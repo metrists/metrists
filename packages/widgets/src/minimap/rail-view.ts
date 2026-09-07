@@ -20,6 +20,17 @@
  * at full opacity, never dimmed, so a hollow dot truly reads as empty).
  * A plain button layer above carries hover, click, tooltip, aria.
  */
+// The rail's stylesheet belongs to this module — it styles the DOM built
+// here — but the import must not run where no DOM exists: the markdown
+// worker reaches this file statically (worker → widgetSchemaNodes → package
+// index → registry → extension → rail-view), and in dev Vite injects CSS by
+// touching `document` DURING graph evaluation — before the worker's DOM
+// shim installs — which crashed the worker and silently moved every
+// markdown conversion onto the main thread. A DOM-guarded dynamic import
+// keeps the stylesheet renderer-only; in the page it resolves long before
+// any editor mounts a rail.
+if (typeof document !== "undefined") void import("./minimap.css");
+
 import type { EditorView } from "@tiptap/pm/view";
 import type { PluginView } from "@tiptap/pm/state";
 import type { Node as PMNode } from "@tiptap/pm/model";
