@@ -39,13 +39,12 @@ const GOO_LAYER_CLASS =
 const SIDE_LAYER_CLASS =
   "opacity-80 transition-opacity duration-200 group-hover/map:opacity-100";
 /* "Holds a result" is a tonal shift of the whole bump, not an inner core:
-   the vessel's clay deepens when it's full. Each carries its own
-   group-hover variant because overriding the inherited color detaches the
-   bump from the goo group's hover transition. */
+   the vessel's clay deepens when it's full — the same neutral deepening
+   for error as for fresh, since the error wave alone carries the red. It
+   carries its own group-hover variant because overriding the inherited
+   color detaches the bump from the goo group's hover transition. */
 const BUMP_FULL_CLASS =
   "text-[color-mix(in_oklab,hsl(var(--muted-foreground))_85%,hsl(var(--background)))] transition-colors duration-200 group-hover/map:text-[hsl(var(--muted-foreground))]";
-const BUMP_ERROR_CLASS =
-  "text-[color-mix(in_oklab,hsl(var(--destructive))_45%,hsl(var(--muted-foreground)))] transition-colors duration-200 group-hover/map:text-[color-mix(in_oklab,hsl(var(--destructive))_60%,hsl(var(--muted-foreground)))]";
 const NEUTRAL_WAVE_CLASS = "fill-foreground/70";
 const ERROR_WAVE_CLASS =
   "fill-[color-mix(in_oklab,hsl(var(--destructive))_55%,hsl(var(--background)))]";
@@ -375,11 +374,7 @@ export class MinimapRailView implements PluginView {
     dot.bump.style.transition = "r 150ms ease, color 200ms ease";
     dot.bump.setAttribute(
       "class",
-      state.core === "error"
-        ? BUMP_ERROR_CLASS
-        : state.core === "fresh"
-          ? BUMP_FULL_CLASS
-          : "",
+      state.core === "fresh" || state.core === "error" ? BUMP_FULL_CLASS : "",
     );
     dot.bump.style.animation =
       state.breathe && !hovered
