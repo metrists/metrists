@@ -32,7 +32,13 @@ export function serverInstructions(): string {
     `text surrounding the prompt's position, the current selection, and the other ` +
     `files open in the workspace) is deliberately sized to be enough context to ` +
     `act on most requests directly — treat it as your default context, not an ` +
-    `optional extra. ` +
+    `optional extra. A widget prompt that OPENS with a markdown blockquote ` +
+    `(\`> …\` lines) is quoting the exact passage the user had selected when ` +
+    `they summoned the widget — treat that passage as the prompt's primary ` +
+    `referent. The payload's \`selectedRange\` is its capture-time position; ` +
+    `pass those same \`from\`/\`to\` numbers to the \`document_read_range\` ` +
+    `tool (padded outward if you like) to read the current content there or ` +
+    `a wider window — same coordinate space, no conversion. ` +
     `(2) \`widget_respond\`: when a prompt carries that widget-context ` +
     `resource_link, you MUST deliver your final response by calling ` +
     `\`widget_respond\` before ending the turn — kind "answer" for the response ` +

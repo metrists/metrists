@@ -35,6 +35,10 @@ export interface WidgetPromptTarget {
   /** Document position the widget sat at when the prompt was sent. */
   pos: number;
   isDocEmpty: boolean;
+  /** The selection this widget was summoned over, captured at summon time —
+   *  the text snapshot is authoritative; the positions are capture-time and
+   *  never re-anchored as the document changes. */
+  reference?: { text: string; from: number; to: number };
 }
 
 /** The live rows behind one widget's bound round. */

@@ -62,6 +62,8 @@ function render(
     turn?: Partial<AgentTurn>;
     task?: Partial<AgentTaskRow>;
     draft?: string;
+    reference?: { text: string; from: number; to: number } | null;
+    clearReference?: () => void;
   } = {},
 ): string {
   container = document.createElement("div");
@@ -90,6 +92,8 @@ function render(
             ...overrides.display,
           },
           actions,
+          reference: overrides.reference ?? null,
+          clearReference: overrides.clearReference,
           documentPath: "/ws/doc.md",
           draft: overrides.draft ?? "",
           draftIO: {
@@ -118,6 +122,57 @@ describe("PromptBlobFace", () => {
   it("shows the composer while composing", () => {
     render("composing");
     expect(container?.querySelector('[data-testid="composer"]')).not.toBeNull();
+  });
+
+  it("shows the referenced text's first line in every phase", () => {
+    const reference = { text: "first line\nsecond line", from: 2, to: 24 };
+    for (const phase of ["composing", "running", "done"] as BlobPhase[]) {
+      const text = render(phase, { reference });
+      expect(text).toContain("first line");
+      expect(text).not.toContain("second line");
+      act(() => root?.unmount());
+      container?.remove();
+    }
+  });
+
+  it("the reference chip's remove control calls clearReference", () => {
+    const clearReference = vi.fn();
+    render("composing", {
+      reference: { text: "the passage", from: 2, to: 13 },
+      clearReference,
+    });
+    const button = container?.querySelector(
+      'button[aria-label="promptBlobReferenceRemove"]',
+    ) as HTMLButtonElement;
+    expect(button).toBeTruthy();
+    act(() => button.click());
+    expect(clearReference).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers the remove control only while the next prompt is composable", () => {
+    const removeButton = () =>
+      container?.querySelector(
+        'button[aria-label="promptBlobReferenceRemove"]',
+      );
+    const reference = { text: "the passage", from: 2, to: 13 };
+    // In flight: the quote is a record of what the agent received.
+    for (const phase of ["queued", "running"] as BlobPhase[]) {
+      render(phase, { reference, clearReference: vi.fn() });
+      expect(removeButton()).toBeNull();
+      act(() => root?.unmount());
+      container?.remove();
+    }
+    // Settled: the reply composer is live again, so the quote is editable.
+    for (const phase of ["composing", "done", "error"] as BlobPhase[]) {
+      render(phase, { reference, clearReference: vi.fn() });
+      expect(removeButton()).not.toBeNull();
+      act(() => root?.unmount());
+      container?.remove();
+    }
+  });
+
+  it("renders no reference line without a captured reference", () => {
+    expect(render("composing")).not.toContain("first line");
   });
 
   it("shows the sent prompt, not the draft, once sent", () => {

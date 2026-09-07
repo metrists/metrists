@@ -79,6 +79,7 @@ import { requestTabFocus } from "@/tabs/tab-controllers";
 import { agentTabId } from "@/tabs/tab-id";
 import { CopyTextButton } from "@notefig/widgets";
 import { jumpToBlob } from "@/components/editor/blobs/jump-to-blob";
+import { splitLeadingQuote } from "@/agent/agents";
 
 /**
  * One agent session as a dockable tab: streamed turn output (message chunks
@@ -749,6 +750,9 @@ function MessageEntry({
 }) {
   const isUser = entry.type === "user";
   const text = entry.text?.trim() ?? "";
+  const { quote, rest } = isUser
+    ? splitLeadingQuote(text)
+    : { quote: null, rest: text };
   return (
     <div
       className={cn(
@@ -769,7 +773,18 @@ function MessageEntry({
           queued && "opacity-70",
         )}
       >
-        {isUser ? text : <Markdown text={text} />}
+        {isUser ? (
+          <>
+            {quote !== null && (
+              <blockquote className="mb-1 border-l-2 border-primary-foreground/40 pl-2 text-[0.625rem] italic leading-snug opacity-85">
+                {quote}
+              </blockquote>
+            )}
+            {rest}
+          </>
+        ) : (
+          <Markdown text={text} />
+        )}
         {queued && <QueuedBadge taskId={entry.taskId} turnId={entry.turnId} />}
       </div>
       <MessageFooter text={text} createdAt={entry.createdAt} isUser={isUser} />

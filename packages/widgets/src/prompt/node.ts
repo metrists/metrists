@@ -115,6 +115,11 @@ export const AiPromptNodeBase = Node.create({
       // send time by the node view, null while composing. Its presence is
       // what turns the widget from UI into file content.
       taskId: { default: null },
+      // PromptReference | null — the text the user had selected when this
+      // widget was summoned over a selection, frozen at capture (positions
+      // are capture-time, never re-mapped). Never serialized: a reload
+      // drops it, same as the draft.
+      reference: { default: null },
     };
   },
 

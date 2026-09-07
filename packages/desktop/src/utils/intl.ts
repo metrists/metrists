@@ -535,6 +535,7 @@ i18n
           promptBlobPlaceholder: "Ask AI — edit this doc, or any other…",
           promptBlobQueued: "Queued",
           promptBlobQueuedAhead: "Queued · {{count}} ahead",
+          promptBlobReferenceRemove: "Remove reference",
           promptBlobEdit: "Edit prompt",
           promptBlobDone: "Done",
           promptBlobStopped: "Stopped",
@@ -608,6 +609,7 @@ i18n
           // never the literal text; resolved in mcp-server.ts's tools/list)
           agentToolWorkspaceListDocuments: "List Documents",
           agentToolWorkspaceReadDocument: "Read Document",
+          agentToolDocumentReadRange: "Read Document Range",
           agentToolWorkspaceOpenFiles: "Open Files",
           agentToolHistoryLog: "Document History",
           agentToolHistoryDiff: "Compare Versions",

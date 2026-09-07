@@ -82,7 +82,7 @@ import {
 // The one `agents` facade (ToolContext.agents). Deferred-use import: this
 // module ↔ agents.ts reference each other only inside function bodies, never
 // at module-eval time, so evaluation order is a non-issue.
-import { agents } from "./agents";
+import { agents, splitLeadingQuote } from "./agents";
 
 /** KV namespace for agent state (sessionId per task, workspace trust flag). */
 const AGENT_KV_NAMESPACE = "agent";
@@ -810,9 +810,11 @@ export class AgentTask {
     }
     const sessionId = this.sessionId;
 
-    // First prompt names the task.
+    // First prompt names the task — minus a leading reference blockquote,
+    // which is the quoted document passage, not what the user asked.
     if (this.title === "New task") {
-      this.title = text.length > 60 ? `${text.slice(0, 57)}…` : text;
+      const named = splitLeadingQuote(text).rest.trim() || text;
+      this.title = named.length > 60 ? `${named.slice(0, 57)}…` : named;
       agentTasksCollection.update(this.taskId, (draft) => {
         draft.title = this.title;
       });

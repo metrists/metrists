@@ -48,15 +48,20 @@ export {
  * the app declares its own no-content nodes (frontmatter).
  */
 export {
+  captureSelectionReference,
+  deleteWidgetTr,
   docHasPromptNode,
   docHasRealContent,
   findPromptNodeId,
   findPromptNodePos,
+  MAX_REFERENCE_CHARS,
   promptDraftRange,
   registerContentlessNodeName,
   removeToParagraphTr,
   revertToSlashTr,
   selectionDraft,
+  selectionSummonTr,
+  type PromptReference,
 } from "./prompt/doc-helpers";
 
 /** The standalone composer and its copy affordance, for the chat tab —

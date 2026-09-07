@@ -6,8 +6,12 @@
  * reads it on demand via `resources/read` (mcp-server.ts), which calls
  * `buildWidgetContextPayload` here — everything is computed fresh at read
  * time from live state (selection, open files, document text) except the
- * position, which is the raw ProseMirror pos captured at send time and
- * reused as-is (no fuzzy re-anchoring — see document-outline.ts).
+ * position and the referenced selection's from/to, which are the raw
+ * ProseMirror coordinates captured at send time and reused as-is (no fuzzy
+ * re-anchoring — see document-outline.ts). The referenced TEXT itself is
+ * not here: it leads the prompt as a markdown blockquote (agents.ts), and
+ * `selectedRange` below shares its coordinate space with the
+ * `document_read_range` tool so the agent can widen the window on demand.
  */
 import { resolveExtensions, getSchemaByResolvedExtensions } from "@tiptap/core";
 import { Node as PMNode } from "@tiptap/pm/model";
@@ -41,6 +45,15 @@ async function parseDocFromDisk(absolutePath: string): Promise<PMNode> {
   return PMNode.fromJSON(fallbackSchema, fallbackCodec.parse(markdown));
 }
 
+/** The document as ProseMirror sees it — the live editor's doc when the
+ *  file is open (unsaved edits included), parsed from disk otherwise.
+ *  Shared with `document_read_range`: the tool must address the same
+ *  coordinate space this resource's positions come from. */
+export async function resolveDocument(absolutePath: string): Promise<PMNode> {
+  const liveEditor = getMarkdownEditor(absolutePath);
+  return liveEditor ? liveEditor.state.doc : parseDocFromDisk(absolutePath);
+}
+
 export interface WidgetContextPayload {
   documentTitle: string;
   documentPath: string;
@@ -51,6 +64,11 @@ export interface WidgetContextPayload {
   position: { headingText: string | null };
   surroundingText: string;
   selectedText: string | null;
+  /** Capture-time ProseMirror range of the passage quoted at the top of
+   *  the prompt (summon-over-selection). Same coordinate space as the
+   *  `document_read_range` tool's from/to — hand these to it to read the
+   *  current content there or a wider window. Never re-anchored. */
+  selectedRange: { from: number; to: number } | null;
   otherOpenFiles: Array<{ path: string; active: boolean; dirty: boolean }>;
 }
 
@@ -61,16 +79,14 @@ export async function buildWidgetContextPayload(
   const resolved = resolveWorkspacePath(workspacePath, ref.path);
   if (!resolved.ok) throw new Error(resolved.error);
 
-  const liveEditor = getMarkdownEditor(resolved.absolute);
-  const doc = liveEditor
-    ? liveEditor.state.doc
-    : await parseDocFromDisk(resolved.absolute);
+  const doc = await resolveDocument(resolved.absolute);
 
   const outline = extractOutline(doc);
   const heading = nearestPrecedingHeading(doc, ref.pos);
   const surroundingText = windowAroundPos(doc, ref.pos);
 
   const selectedText = getSelectedText(resolved.absolute) ?? null;
+  const selectedRange = ref.selectedRange ?? null;
 
   const editorCtx = getWorkspaceEditorContext(workspacePath);
   const otherOpenFiles = editorCtx.openFiles
@@ -87,6 +103,7 @@ export async function buildWidgetContextPayload(
     position: { headingText: heading?.text ?? null },
     surroundingText,
     selectedText,
+    selectedRange,
     otherOpenFiles,
   };
 }

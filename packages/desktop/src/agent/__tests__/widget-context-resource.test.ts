@@ -99,6 +99,29 @@ describe("buildWidgetContextPayload", () => {
     ]);
   });
 
+  it("passes a referenced from/to range through as selectedRange", async () => {
+    const editor = makeEditor("# Intro\n\nSome body text right here.");
+    getMarkdownEditor.mockReturnValue(editor);
+    getSelectedText.mockReturnValue(undefined);
+    const payload = await buildWidgetContextPayload("/ws", {
+      path: "doc.md",
+      pos: 12,
+      selectedRange: { from: 9, to: 27 },
+    });
+    expect(payload.selectedRange).toEqual({ from: 9, to: 27 });
+  });
+
+  it("returns null selectedRange when the ref carries no range", async () => {
+    const editor = makeEditor("# Intro\n\nSome body text right here.");
+    getMarkdownEditor.mockReturnValue(editor);
+    getSelectedText.mockReturnValue(undefined);
+    const payload = await buildWidgetContextPayload("/ws", {
+      path: "doc.md",
+      pos: 12,
+    });
+    expect(payload.selectedRange).toBeNull();
+  });
+
   it("returns null selectedText when there is no live selection", async () => {
     const editor = makeEditor("plain text");
     getMarkdownEditor.mockReturnValue(editor);
