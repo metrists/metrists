@@ -9,7 +9,8 @@
  *
  * The dot-state vocabulary is the settled two-axis map:
  * CORE = where the element's round is in its lifecycle (hollow: empty
- * vessel; solid: being filled; bright: holds a result).
+ * vessel; solid: being filled; deepened tint: holds a result — rendered
+ * as a tonal shift of the whole bump, never an inner core).
  * MOTION = what's needed (still: nothing; body breathe: system busy;
  * emitted wave: a human must act — silenced by acting or by seeing).
  * Hover/press motion is reserved for interaction feedback, never state.
@@ -24,8 +25,9 @@ export type MinimapDotCore =
 
 export type MinimapDotState = {
   core: MinimapDotCore;
-  /** Phase description for the accessible name; the visuals carry it in
-   *  the UI, so the tooltip never spells it out. */
+  /** Phase description, shown as the tooltip's first line and folded
+   *  into the accessible name — it names what the dot's visuals mean, so
+   *  the vocabulary is learnable by hovering. */
   label: string | null;
   /** Background-colored punch in the bump's center — an empty vessel. */
   hollow: boolean;
