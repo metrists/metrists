@@ -681,6 +681,23 @@ function RunningFace({
  * lives in PromptBlob, so this is the part that can be rendered in a test
  * with plain objects.
  */
+/**
+ * The widget claims its pointer events wholesale: ProseMirror must not turn
+ * clicks on its controls into node selections, and the editor's
+ * gutter-click focus handler must not grab them either. The draft is the
+ * exception — it is document text, and a click there has to place a caret
+ * like any other.
+ */
+function claimWidgetPointerEvents(event: React.MouseEvent): void {
+  if (
+    event.target instanceof Element &&
+    event.target.closest("[data-prompt-draft]")
+  ) {
+    return;
+  }
+  event.stopPropagation();
+}
+
 export function PromptBlobFace({
   phase,
   record,
@@ -719,23 +736,7 @@ export function PromptBlobFace({
   actions: PromptBlobFaceActions;
 }) {
   return (
-    <div
-      // The widget claims its pointer events wholesale: ProseMirror must
-      // not turn clicks on its controls into node selections, and the
-      // editor's gutter-click focus handler must not grab them either. The
-      // draft is the exception — it is document text, and a click there has
-      // to place a caret like any other.
-      onMouseDown={(event) => {
-        if (
-          event.target instanceof Element &&
-          event.target.closest("[data-prompt-draft]")
-        ) {
-          return;
-        }
-        event.stopPropagation();
-      }}
-      className="w-full"
-    >
+    <div onMouseDown={claimWidgetPointerEvents} className="w-full">
       <AnimatedHeight>
         <div
           className={cn(
