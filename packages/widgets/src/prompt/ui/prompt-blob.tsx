@@ -769,28 +769,13 @@ export function PromptBlobFace({
               actions={actions}
             />
 
-            {phase === "done" && (
-              <DoneState
-                cancelled={turn?.status === "cancelled"}
-                response={display.widgetResponse}
-                fallbackText={display.assistantTeaser}
-                touchedFiles={display.touchedFiles}
-                onOpenFile={(path) => actions.openFile(path)}
-                onOpenChat={() =>
-                  boundTaskId && actions.openAgentTab(boundTaskId)
-                }
-                onDismiss={actions.dismiss}
-              />
-            )}
-
-            {phase === "error" && (
-              <ErrorState
-                message={turn?.error}
-                onRetry={actions.retry}
-                onEdit={actions.editPrompt}
-                onDismiss={actions.dismiss}
-              />
-            )}
+            <SettledState
+              phase={phase}
+              turn={turn}
+              display={display}
+              boundTaskId={boundTaskId}
+              actions={actions}
+            />
           </div>
 
           <DraftRow
@@ -807,6 +792,47 @@ export function PromptBlobFace({
       </AnimatedHeight>
     </div>
   );
+}
+
+/** The face of a settled round: Done and Error are the two resting cards,
+ *  chosen here so the face itself stays phase-agnostic layout. */
+function SettledState({
+  phase,
+  turn,
+  display,
+  boundTaskId,
+  actions,
+}: {
+  phase: BlobPhase;
+  turn: AgentTurn | undefined;
+  display: PromptBlobDisplay;
+  boundTaskId: string | null;
+  actions: PromptBlobFaceActions;
+}) {
+  if (phase === "done") {
+    return (
+      <DoneState
+        cancelled={turn?.status === "cancelled"}
+        response={display.widgetResponse}
+        fallbackText={display.assistantTeaser}
+        touchedFiles={display.touchedFiles}
+        onOpenFile={(path) => actions.openFile(path)}
+        onOpenChat={() => boundTaskId && actions.openAgentTab(boundTaskId)}
+        onDismiss={actions.dismiss}
+      />
+    );
+  }
+  if (phase === "error") {
+    return (
+      <ErrorState
+        message={turn?.error}
+        onRetry={actions.retry}
+        onEdit={actions.editPrompt}
+        onDismiss={actions.dismiss}
+      />
+    );
+  }
+  return null;
 }
 
 /**
