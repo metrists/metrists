@@ -200,6 +200,79 @@ export function slashSummonTr(
 }
 
 /**
+ * The selection a widget was summoned over, frozen at capture time. The
+ * text snapshot is the payload the agent receives; the positions are
+ * advisory context only (never re-mapped as the document changes — there
+ * is no highlight to keep anchored).
+ */
+export interface PromptReference {
+  text: string;
+  from: number;
+  to: number;
+}
+
+/** Guard against pathological selections — the agent gets at most this. */
+export const MAX_REFERENCE_CHARS = 8000;
+
+/** The current selection as a reference, or null when there is nothing
+ *  worth referencing (collapsed, or whitespace-only). */
+export function captureSelectionReference(
+  state: EditorState,
+): PromptReference | null {
+  const { selection } = state;
+  if (!(selection instanceof TextSelection) || selection.empty) return null;
+  const { from, to } = selection;
+  const text = state.doc.textBetween(from, to, "\n");
+  if (!text.trim()) return null;
+  return { text: text.slice(0, MAX_REFERENCE_CHARS), from, to };
+}
+
+/**
+ * The selection summon: "/" typed over a non-empty selection inserts a
+ * `summoned` widget carrying the selection as its reference AFTER the
+ * top-level block the selection ends in — the referenced text stays in the
+ * document untouched, and the "/" itself is consumed, never inserted.
+ * Null when there is nothing to reference or the document can't hold a
+ * widget there (the caller falls back to letting "/" type normally).
+ * A regular history transaction like slashSummonTr (⌘Z removes the widget).
+ */
+export function selectionSummonTr(
+  state: EditorState,
+  blobId: string,
+): Transaction | null {
+  const reference = captureSelectionReference(state);
+  if (!reference) return null;
+  const { $to } = state.selection;
+  if ($to.depth < 1) return null;
+  const type = state.schema.nodes[PROMPT_NODE_NAME];
+  if (!type) return null;
+  // Top-level insertion keeps v1 simple: a selection ending inside a list
+  // puts the widget after the whole list, not inside it.
+  const index = $to.index(0) + 1;
+  if (!state.doc.canReplaceWith(index, index, type)) return null;
+  const node = type.createAndFill({ summoned: true, blobId, reference });
+  if (!node) return null;
+  const pos = $to.after(1);
+  const tr = state.tr.insert(pos, node);
+  return tr.setSelection(NodeSelection.create(tr.doc, pos));
+}
+
+/**
+ * Dismissal for a selection-summoned widget: the summon consumed no
+ * paragraph and no "/", so dismissing leaves nothing behind — the widget
+ * at [pos, pos+nodeSize) is deleted and the caret lands at the end of the
+ * block above (where the referenced selection was).
+ */
+export function deleteWidgetTr(
+  state: EditorState,
+  pos: number,
+  nodeSize: number,
+): Transaction {
+  const tr = state.tr.delete(pos, pos + nodeSize);
+  return tr.setSelection(TextSelection.near(tr.doc.resolve(pos), -1));
+}
+
+/**
  * The revert half of the "/" contract: the widget at [pos, pos+nodeSize)
  * becomes a paragraph holding a literal "/", cursor placed after it —
  * exactly what Esc or a second "/" in the empty composer should leave

@@ -17,6 +17,7 @@ import {
   Pencil,
   RotateCw,
   Square,
+  TextQuote,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -53,6 +54,7 @@ import {
   promptDraftRange,
   selectionDraft,
 } from "../doc-helpers";
+import type { PromptReference } from "../doc-helpers";
 import { basename } from "../basename";
 import {
   getPromptBlob,
@@ -72,6 +74,7 @@ import {
   deriveDoneLine,
   widgetPromptTarget,
   blobCardClass,
+  referenceRemovalArmed,
   type BlobPhase,
 } from "../state";
 
@@ -119,12 +122,24 @@ interface PromptBlobPlacement {
   /** True when this instance was summoned by typing "/" — arms the
    *  revert-to-"/" contract (Esc / second "/" in the empty composer). */
   summoned?: boolean;
+  /** The selection this widget was summoned over (the node's reference
+   *  attr), frozen at capture. Redirects the summon's dismiss gestures to
+   *  plain removal — there is no "/" or paragraph to restore — and renders
+   *  as the quoted line above the composer. */
+  reference?: PromptReference | null;
+  /** Drop the captured reference from the node (the chip's ✕): the widget
+   *  becomes a regular one — future sends carry no reference and the
+   *  summon dismiss gestures disarm. Provided by the node view. */
+  clearReference?: () => void;
   /** Remove this widget's document node; insertSlash leaves a literal "/"
    *  in its place, restoreParagraph leaves a plain empty paragraph (the
-   *  Backspace-dismiss path). Provided by the node view (getPos/deleteNode). */
+   *  Backspace-dismiss path), restoreCaret deletes outright and lands the
+   *  caret at the end of the block above (the selection-summon dismiss).
+   *  Provided by the node view (getPos/deleteNode). */
   removeNode?: (options?: {
     insertSlash?: boolean;
     restoreParagraph?: boolean;
+    restoreCaret?: boolean;
   }) => void;
   /** Record which agent session this widget's round belongs to on the
    *  document node, so it survives a re-parse and app restarts (MET-163).
@@ -457,7 +472,11 @@ function useComposerKeys({
   canRevert: boolean;
   actions: Pick<
     PromptBlobFaceActions,
-    "send" | "sendFollowUp" | "escapeToEditor" | "revertToSlash" | "backspaceDismiss"
+    | "send"
+    | "sendFollowUp"
+    | "escapeToEditor"
+    | "revertToSlash"
+    | "backspaceDismiss"
   > & { replying: boolean };
 }) {
   const latest = useRef({ draftIO, canRevert, actions });
@@ -467,8 +486,11 @@ function useComposerKeys({
     () =>
       registerComposerKeyHandler(blobId, (input) => {
         if (mentionPopupHasResults(documentPath)) return false;
-        const { draftIO: io, canRevert: revertable, actions: live } =
-          latest.current;
+        const {
+          draftIO: io,
+          canRevert: revertable,
+          actions: live,
+        } = latest.current;
         // Read the draft off the live document, per useDraftIO's own
         // discipline — the render snapshot can trail the document, and a
         // stale "empty" here would dismiss the widget on the very keypress
@@ -482,8 +504,7 @@ function useComposerKeys({
           // been sent; dismissal to any removable one. A reply row (a
           // widget showing its round) gets neither.
           canRevert: revertable && !live.replying,
-          canDismiss:
-            live.backspaceDismiss !== undefined && !live.replying,
+          canDismiss: live.backspaceDismiss !== undefined && !live.replying,
           // Escape mid-turn is a global hotkey with its own claim map
           // (useInFlightEscape) — it must not be resolved twice.
           inFlight: false,
@@ -612,7 +633,6 @@ function SentFace({
   return null;
 }
 
-
 /** The in-flight card: the shimmer status row, and — while the agent waits
  *  on a permission — the permission card under it. */
 function RunningFace({
@@ -661,6 +681,23 @@ function RunningFace({
  * lives in PromptBlob, so this is the part that can be rendered in a test
  * with plain objects.
  */
+/**
+ * The widget claims its pointer events wholesale: ProseMirror must not turn
+ * clicks on its controls into node selections, and the editor's
+ * gutter-click focus handler must not grab them either. The draft is the
+ * exception — it is document text, and a click there has to place a caret
+ * like any other.
+ */
+function claimWidgetPointerEvents(event: React.MouseEvent): void {
+  if (
+    event.target instanceof Element &&
+    event.target.closest("[data-prompt-draft]")
+  ) {
+    return;
+  }
+  event.stopPropagation();
+}
+
 export function PromptBlobFace({
   phase,
   record,
@@ -676,6 +713,8 @@ export function PromptBlobFace({
   draft,
   draftIO,
   draftSlot,
+  reference,
+  clearReference,
   actions,
 }: {
   phase: BlobPhase;
@@ -692,26 +731,12 @@ export function PromptBlobFace({
   draft: string;
   draftIO: DraftIO;
   draftSlot?: React.ReactNode;
+  reference?: PromptReference | null;
+  clearReference?: () => void;
   actions: PromptBlobFaceActions;
 }) {
   return (
-    <div
-      // The widget claims its pointer events wholesale: ProseMirror must
-      // not turn clicks on its controls into node selections, and the
-      // editor's gutter-click focus handler must not grab them either. The
-      // draft is the exception — it is document text, and a click there has
-      // to place a caret like any other.
-      onMouseDown={(event) => {
-        if (
-          event.target instanceof Element &&
-          event.target.closest("[data-prompt-draft]")
-        ) {
-          return;
-        }
-        event.stopPropagation();
-      }}
-      className="w-full"
-    >
+    <div onMouseDown={claimWidgetPointerEvents} className="w-full">
       <AnimatedHeight>
         <div
           className={cn(
@@ -727,6 +752,13 @@ export function PromptBlobFace({
               through every button, and will happily park a caret in a
               status line. The draft below is the one editable island. */}
           <div contentEditable={false}>
+            {reference && (
+              <ReferenceChip
+                text={reference.text}
+                phase={phase}
+                onRemove={clearReference}
+              />
+            )}
             <SentFace
               phase={phase}
               record={record}
@@ -737,28 +769,13 @@ export function PromptBlobFace({
               actions={actions}
             />
 
-            {phase === "done" && (
-              <DoneState
-                cancelled={turn?.status === "cancelled"}
-                response={display.widgetResponse}
-                fallbackText={display.assistantTeaser}
-                touchedFiles={display.touchedFiles}
-                onOpenFile={(path) => actions.openFile(path)}
-                onOpenChat={() =>
-                  boundTaskId && actions.openAgentTab(boundTaskId)
-                }
-                onDismiss={actions.dismiss}
-              />
-            )}
-
-            {phase === "error" && (
-              <ErrorState
-                message={turn?.error}
-                onRetry={actions.retry}
-                onEdit={actions.editPrompt}
-                onDismiss={actions.dismiss}
-              />
-            )}
+            <SettledState
+              phase={phase}
+              turn={turn}
+              display={display}
+              boundTaskId={boundTaskId}
+              actions={actions}
+            />
           </div>
 
           <DraftRow
@@ -777,6 +794,47 @@ export function PromptBlobFace({
   );
 }
 
+/** The face of a settled round: Done and Error are the two resting cards,
+ *  chosen here so the face itself stays phase-agnostic layout. */
+function SettledState({
+  phase,
+  turn,
+  display,
+  boundTaskId,
+  actions,
+}: {
+  phase: BlobPhase;
+  turn: AgentTurn | undefined;
+  display: PromptBlobDisplay;
+  boundTaskId: string | null;
+  actions: PromptBlobFaceActions;
+}) {
+  if (phase === "done") {
+    return (
+      <DoneState
+        cancelled={turn?.status === "cancelled"}
+        response={display.widgetResponse}
+        fallbackText={display.assistantTeaser}
+        touchedFiles={display.touchedFiles}
+        onOpenFile={(path) => actions.openFile(path)}
+        onOpenChat={() => boundTaskId && actions.openAgentTab(boundTaskId)}
+        onDismiss={actions.dismiss}
+      />
+    );
+  }
+  if (phase === "error") {
+    return (
+      <ErrorState
+        message={turn?.error}
+        onRetry={actions.retry}
+        onEdit={actions.editPrompt}
+        onDismiss={actions.dismiss}
+      />
+    );
+  }
+  return null;
+}
+
 /**
  * The inline prompt blob: the primary prompting surface, hosted by the
  * aiPrompt document node (ai-prompt-node.tsx) — part of the markdown AST in
@@ -791,6 +849,16 @@ export function PromptBlobFace({
  * Turns queue into the shared per-workspace session (blob-session-store);
  * each widget watches only its own bound turnId.
  */
+/** One click from any bound phase to the session's full transcript
+ *  (MET-104) — the done face has its own copy of this in DoneState. */
+function openBoundChatAction(
+  host: PromptWidgetHost,
+  boundTaskId: string | null,
+): (() => void) | undefined {
+  if (!boundTaskId) return undefined;
+  return () => host.openAgentTab(boundTaskId);
+}
+
 /**
  * Everything the face needs, assembled from the store, the collections and
  * the action hooks. Splitting it out keeps the component itself a container
@@ -809,6 +877,7 @@ function usePromptBlobModel(placement: PromptBlobPlacement) {
   // node view (which re-renders on every document change) rather than from
   // the store. `draftIO` is how the actions write it back.
   const draft = placement.draft ?? "";
+  const reference = placement.reference ?? null;
   const draftIO = useDraftIO(editor, blobId, workspacePath);
 
   const { label: harnessLabel } = host.useDefaultHarness();
@@ -819,7 +888,8 @@ function usePromptBlobModel(placement: PromptBlobPlacement) {
       documentPath,
       editor,
       getPos,
-      summoned: placement.summoned ?? false,
+      summoned: placement.summoned === true,
+      reference,
       removeNode: placement.removeNode,
       onSessionBound: placement.onSessionBound,
       draftIO,
@@ -862,11 +932,7 @@ function usePromptBlobModel(placement: PromptBlobPlacement) {
     },
   });
 
-  // One click from any bound phase to the session's full transcript
-  // (MET-104) — the done face has its own copy of this in DoneState.
-  const openBoundChat = boundTaskId
-    ? () => host.openAgentTab(boundTaskId)
-    : undefined;
+  const openBoundChat = openBoundChatAction(host, boundTaskId);
 
   return {
     phase,
@@ -882,6 +948,8 @@ function usePromptBlobModel(placement: PromptBlobPlacement) {
     draft,
     draftIO,
     draftSlot: placement.draftSlot,
+    reference,
+    clearReference: placement.clearReference,
     documentPath,
     actions: {
       ...actions,
@@ -957,6 +1025,15 @@ function usePromptSendActions({
   const dispatchPrompt = useCallback(
     (taskId: string, text: string) => {
       const doc = editor.state.doc;
+      // The reference rides the node, so it too is read fresh: a follow-up
+      // keeps sending the round's referent for as long as the attr exists
+      // (a re-parse from the file marker drops it, like the draft).
+      const nodePos = findPromptNodePos(doc, blobId);
+      const reference =
+        nodePos !== null
+          ? ((doc.nodeAt(nodePos)?.attrs.reference ??
+              null) as PromptReference | null)
+          : null;
       return host.dispatchPrompt({
         taskId,
         text,
@@ -967,11 +1044,12 @@ function usePromptSendActions({
           pos: getPos?.(),
           docContentSize: doc.content.size,
           isDocEmpty: !docHasRealContent(doc),
+          reference,
           toRelativePath: host.toRelativePath,
         }),
       }).turnId;
     },
-    [host, documentPath, workspacePath, editor, getPos],
+    [host, blobId, documentPath, workspacePath, editor, getPos],
   );
 
   const send = useCallback(async () => {
@@ -1066,11 +1144,13 @@ function usePromptBlobActions({
   editor,
   getPos,
   summoned,
+  reference,
   removeNode,
   onSessionBound,
   draftIO,
 }: PromptBlobPlacement & {
   summoned: boolean;
+  reference: PromptReference | null;
   draftIO: DraftIO;
 }) {
   const host = usePromptWidgetHost();
@@ -1149,14 +1229,16 @@ function usePromptBlobActions({
   }, [blobId, removeNode, editor]);
 
   // The revert half of the "/" summon: Esc or a second "/" while the
-  // composer is still empty turns the widget back into a literal "/".
-  const revertToSlash = useMemo(
-    () =>
-      summoned && removeNode
-        ? () => removeNode({ insertSlash: true })
-        : undefined,
-    [summoned, removeNode],
-  );
+  // composer is still empty turns the widget back into a literal "/". A
+  // selection-summoned widget never inserted a "/", so its revert is plain
+  // removal with the caret restored — deliberately, a second "/" there
+  // dismisses rather than reverting-to-slash.
+  const revertToSlash = useMemo(() => {
+    if (!summoned || !removeNode) return undefined;
+    return reference
+      ? () => removeNode({ restoreCaret: true })
+      : () => removeNode({ insertSlash: true });
+  }, [summoned, reference, removeNode]);
 
   // Backspace on an empty composer: the widget just disappears. A summoned
   // instance restores the paragraph the summon consumed (as if "/" was
@@ -1170,12 +1252,16 @@ function usePromptBlobActions({
     if (!removeNode) return undefined;
     return () => {
       if (summoned) {
-        removeNode({ restoreParagraph: true });
+        // A selection summon consumed no paragraph — deleting the widget
+        // and restoring the caret is the whole "as if never typed".
+        removeNode(
+          reference ? { restoreCaret: true } : { restoreParagraph: true },
+        );
         return;
       }
       if (docHasRealContent(editor.state.doc)) removeNode();
     };
-  }, [summoned, removeNode, editor]);
+  }, [summoned, reference, removeNode, editor]);
 
   // Picking a session on a widget that already belongs to one re-targets
   // THIS widget (and its document marker), rather than only moving the
@@ -1592,6 +1678,51 @@ function DoneSummaryLine({
         {summary}
       </button>
     </>
+  );
+}
+
+/** The selection this widget was summoned over — one muted line above the
+ *  face, in every phase: the sent and done cards keep showing what the
+ *  round was about. Truncated to a single line; the tooltip carries a
+ *  larger (still bounded) window of the captured text. The ✕ drops the
+ *  reference and leaves a regular widget behind. */
+export function ReferenceChip({
+  text,
+  phase,
+  onRemove,
+}: {
+  text: string;
+  phase: BlobPhase;
+  onRemove?: () => void;
+}) {
+  const { t } = useTranslation();
+  const firstLine = text.split("\n", 1)[0];
+  const remove = referenceRemovalArmed(phase) ? onRemove : undefined;
+  return (
+    <div className="px-2 pt-1.5 text-[0.5625rem] leading-tight text-muted-foreground/80">
+      {/* The whole quote is one hoverable box: highlighting it as a unit is
+          what scopes the ✕ inside to the quote — a corner ✕ on the card
+          reads as "dismiss the widget". */}
+      <div
+        // inline-flex, not flex: the box hugs the quote instead of claiming
+        // the card's full width — hover only lights up where the text is.
+        className="group/ref inline-flex max-w-full items-center gap-1 rounded-sm px-1 py-0.5 transition-colors hover:bg-accent/50"
+        title={text.length > 600 ? `${text.slice(0, 600)}…` : text}
+      >
+        <TextQuote className="size-2.5 shrink-0" />
+        <span className="min-w-0 truncate italic">{firstLine}</span>
+        {remove && (
+          <button
+            type="button"
+            aria-label={t("promptBlobReferenceRemove")}
+            className="shrink-0 cursor-pointer rounded-sm p-0.5 opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover/ref:opacity-100"
+            onClick={remove}
+          >
+            <X className="size-2.5" />
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

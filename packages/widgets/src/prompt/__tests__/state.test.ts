@@ -627,6 +627,34 @@ describe("widgetPromptTarget", () => {
       }),
     ).toEqual({ path: "a.md", pos: 77, isDocEmpty: true });
   });
+
+  it("carries a captured selection reference through to the target", () => {
+    const reference = { text: "the passage", from: 3, to: 14 };
+    expect(
+      widgetPromptTarget({
+        documentPath: "/ws/a.md",
+        workspacePath: "/ws",
+        pos: 20,
+        docContentSize: 100,
+        isDocEmpty: false,
+        reference,
+        toRelativePath,
+      }),
+    ).toEqual({ path: "a.md", pos: 20, isDocEmpty: false, reference });
+  });
+
+  it("omits the reference key entirely when there is none", () => {
+    const target = widgetPromptTarget({
+      documentPath: "/ws/a.md",
+      workspacePath: "/ws",
+      pos: 20,
+      docContentSize: 100,
+      isDocEmpty: false,
+      reference: null,
+      toRelativePath,
+    });
+    expect("reference" in target).toBe(false);
+  });
 });
 
 describe("deriveDoneLine", () => {

@@ -13,12 +13,24 @@
  * viewport's top-right while the document scrolls beneath it — no wrapper
  * or mount point required from the application.
  *
- * Rendering: three svg groups in paint order — the pulse underlay (waves
+ * Rendering: four svg groups in paint order — the pulse underlay (waves
  * travel beneath everything), the gooey layer (line + bumps under a
  * blur + alpha-contrast filter; opaque, dimmed via color-mix so it
- * occludes the underlay), and the crisp overlay (hollow punches, bright
- * cores). A plain button layer above carries hover, click, tooltip, aria.
+ * occludes the underlay), and the punch layer (background-colored holes;
+ * at full opacity, never dimmed, so a hollow dot truly reads as empty).
+ * A plain button layer above carries hover, click, tooltip, aria.
  */
+// The rail's stylesheet belongs to this module — it styles the DOM built
+// here — but the import must not run where no DOM exists: the markdown
+// worker reaches this file statically (worker → widgetSchemaNodes → package
+// index → registry → extension → rail-view), and in dev Vite injects CSS by
+// touching `document` DURING graph evaluation — before the worker's DOM
+// shim installs — which crashed the worker and silently moved every
+// markdown conversion onto the main thread. A DOM-guarded dynamic import
+// keeps the stylesheet renderer-only; in the page it resolves long before
+// any editor mounts a rail.
+if (typeof document !== "undefined") void import("./minimap.css");
+
 import type { EditorView } from "@tiptap/pm/view";
 import type { PluginView } from "@tiptap/pm/state";
 import type { Node as PMNode } from "@tiptap/pm/model";
@@ -37,11 +49,20 @@ const GOO_LAYER_CLASS =
   "text-[color-mix(in_oklab,hsl(var(--muted-foreground))_50%,hsl(var(--background)))] transition-colors duration-200 group-hover/map:text-[color-mix(in_oklab,hsl(var(--muted-foreground))_80%,hsl(var(--background)))]";
 const SIDE_LAYER_CLASS =
   "opacity-80 transition-opacity duration-200 group-hover/map:opacity-100";
+/* "Holds a result" is a tonal shift of the whole bump, not an inner core:
+   the vessel's clay deepens when it's full — the same neutral deepening
+   for error as for fresh, since the error wave alone carries the red. It
+   carries its own group-hover variant because overriding the inherited
+   color detaches the bump from the goo group's hover transition. */
+const BUMP_FULL_CLASS =
+  "text-[color-mix(in_oklab,hsl(var(--muted-foreground))_85%,hsl(var(--background)))] transition-colors duration-200 group-hover/map:text-[hsl(var(--muted-foreground))]";
 const NEUTRAL_WAVE_CLASS = "fill-foreground/70";
 const ERROR_WAVE_CLASS =
   "fill-[color-mix(in_oklab,hsl(var(--destructive))_55%,hsl(var(--background)))]";
 const TOOLTIP_CLASS =
-  "pointer-events-none absolute right-full top-1/2 z-10 mr-1 hidden max-w-[14rem] -translate-y-1/2 truncate whitespace-nowrap rounded border border-border bg-popover px-1.5 py-0.5 text-[0.625rem] leading-tight text-muted-foreground shadow-sm group-hover/dot:block";
+  "pointer-events-none absolute right-full top-1/2 z-10 mr-1 hidden max-w-[14rem] -translate-y-1/2 rounded border border-border bg-popover px-1.5 py-0.5 text-[0.625rem] leading-tight shadow-sm group-hover/dot:block";
+const TOOLTIP_STATE_CLASS = "block truncate font-medium text-foreground";
+const TOOLTIP_TITLE_CLASS = "block truncate text-muted-foreground";
 const BUTTON_CLASS =
   "group/dot absolute left-1/2 size-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer border-0 bg-transparent p-0";
 
@@ -53,10 +74,10 @@ type Dot = {
   hovered: boolean;
   bump: SVGCircleElement;
   wave: SVGCircleElement;
-  core: SVGCircleElement;
   punch: SVGCircleElement;
   button: HTMLButtonElement;
-  tooltip: HTMLSpanElement;
+  tooltipState: HTMLSpanElement;
+  tooltipTitle: HTMLSpanElement;
 };
 
 function svgEl<K extends keyof SVGElementTagNameMap>(
@@ -83,7 +104,7 @@ export class MinimapRailView implements PluginView {
   private readonly nav: HTMLElement;
   private readonly underlay: SVGGElement;
   private readonly goo: SVGGElement;
-  private readonly overlay: SVGGElement;
+  private readonly punches: SVGGElement;
   private readonly buttons: HTMLDivElement;
   private dots: Dot[] = [];
   private observers = new Map<string, MinimapObserver>();
@@ -146,9 +167,11 @@ export class MinimapRailView implements PluginView {
     line.setAttribute("stroke", "currentColor");
     line.setAttribute("stroke-width", "2");
     this.goo.append(line);
-    this.overlay = svgEl("g");
-    this.overlay.setAttribute("class", SIDE_LAYER_CLASS);
-    svg.append(defs, this.underlay, this.goo, this.overlay);
+    // No dimming class: a punch is a hole, and a background-colored
+    // circle at less than full opacity lets the bump bleed through as a
+    // phantom solid core.
+    this.punches = svgEl("g");
+    svg.append(defs, this.underlay, this.goo, this.punches);
 
     this.buttons = document.createElement("div");
     this.buttons.className = "relative h-full";
@@ -226,7 +249,6 @@ export class MinimapRailView implements PluginView {
       if (kept.has(dot)) continue;
       dot.bump.remove();
       dot.wave.remove();
-      dot.core.remove();
       dot.punch.remove();
       dot.button.remove();
     }
@@ -238,11 +260,11 @@ export class MinimapRailView implements PluginView {
   private moveDot(dot: Dot, entry: MinimapEntry): Dot {
     const y = `${entry.ratio * 100}%`;
     dot.entry = entry;
-    for (const circle of [dot.bump, dot.wave, dot.core, dot.punch]) {
+    for (const circle of [dot.bump, dot.wave, dot.punch]) {
       circle.setAttribute("cy", y);
     }
     dot.button.style.top = y;
-    dot.tooltip.textContent = entry.title;
+    dot.tooltipTitle.textContent = entry.title;
     this.applyState(dot);
     return dot;
   }
@@ -262,18 +284,12 @@ export class MinimapRailView implements PluginView {
     wave.style.animation = "nf-minimap-bubble 1.8s infinite";
     this.underlay.append(wave);
 
-    const core = svgEl("circle");
-    core.setAttribute("cx", "50%");
-    core.setAttribute("cy", y);
-    core.setAttribute("r", "1.75");
-    core.setAttribute("class", "fill-foreground/55");
-    this.overlay.append(core);
-
     const punch = svgEl("circle");
     punch.setAttribute("cx", "50%");
     punch.setAttribute("cy", y);
     punch.setAttribute("r", "1.75");
-    this.overlay.append(punch);
+    punch.setAttribute("class", "fill-background");
+    this.punches.append(punch);
 
     const button = document.createElement("button");
     button.type = "button";
@@ -281,7 +297,12 @@ export class MinimapRailView implements PluginView {
     button.style.top = y;
     const tooltip = document.createElement("span");
     tooltip.className = TOOLTIP_CLASS;
-    tooltip.textContent = entry.title;
+    const tooltipState = document.createElement("span");
+    tooltipState.className = TOOLTIP_STATE_CLASS;
+    const tooltipTitle = document.createElement("span");
+    tooltipTitle.className = TOOLTIP_TITLE_CLASS;
+    tooltipTitle.textContent = entry.title;
+    tooltip.append(tooltipState, tooltipTitle);
     button.append(tooltip);
     this.buttons.append(button);
 
@@ -291,10 +312,10 @@ export class MinimapRailView implements PluginView {
       hovered: false,
       bump,
       wave,
-      core,
       punch,
       button,
-      tooltip,
+      tooltipState,
+      tooltipTitle,
     };
     button.addEventListener("mouseenter", () => {
       dot.hovered = true;
@@ -361,7 +382,11 @@ export class MinimapRailView implements PluginView {
     const { state, hovered } = dot;
 
     dot.bump.style.r = hovered ? "6px" : "4px";
-    dot.bump.style.transition = "r 150ms ease";
+    dot.bump.style.transition = "r 150ms ease, color 200ms ease";
+    dot.bump.setAttribute(
+      "class",
+      state.core === "fresh" || state.core === "error" ? BUMP_FULL_CLASS : "",
+    );
     dot.bump.style.animation =
       state.breathe && !hovered
         ? "nf-minimap-breathe 2.4s ease-in-out infinite"
@@ -374,14 +399,17 @@ export class MinimapRailView implements PluginView {
       state.core === "error" ? ERROR_WAVE_CLASS : NEUTRAL_WAVE_CLASS,
     );
 
-    const showCore = state.core === "fresh" || state.core === "error";
-    dot.core.style.display = showCore ? "" : "none";
-
     dot.punch.style.display = state.hollow ? "" : "none";
-    dot.punch.setAttribute(
-      "class",
-      `fill-background${state.pulse ? " animate-pulse" : ""}`,
-    );
+    // Pulse by resizing the hole, never by fading it — a translucent
+    // punch shows the bump through and the vessel stops reading as empty.
+    dot.punch.style.animation = state.pulse
+      ? "nf-minimap-punch-pulse 2s ease-in-out infinite"
+      : "";
+
+    // The state line teaches the dot vocabulary: a first-time user learns
+    // what breathing or pulsing means by hovering the dot that does it.
+    dot.tooltipState.textContent = state.label ?? "";
+    dot.tooltipState.hidden = state.label === null;
 
     dot.button.setAttribute(
       "aria-label",

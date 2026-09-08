@@ -143,6 +143,17 @@ export function deriveWidgetResponse(
  * destructive red. (The caller composes this with the invariant
  * "rounded-lg border".)
  */
+/**
+ * Whether the captured reference may be removed: exactly the phases where
+ * the NEXT prompt is being composed — a fresh widget, or a reply after a
+ * settled round (the same set useComposerKeys calls `replying`, plus
+ * composing itself). While a turn is queued/running the quote is part of
+ * what the agent received — a record, not a setting.
+ */
+export function referenceRemovalArmed(phase: BlobPhase): boolean {
+  return phase === "composing" || phase === "done" || phase === "error";
+}
+
 export function blobCardClass(phase: BlobPhase, hasIssue: boolean): string {
   if (phase === "done") {
     return hasIssue
@@ -177,6 +188,7 @@ export function widgetPromptTarget(params: {
   pos: number | undefined;
   docContentSize: number;
   isDocEmpty: boolean;
+  reference?: { text: string; from: number; to: number } | null;
   toRelativePath: (
     workspacePath: string,
     absolutePath: string,
@@ -188,10 +200,16 @@ export function widgetPromptTarget(params: {
     pos,
     docContentSize,
     isDocEmpty,
+    reference,
     toRelativePath,
   } = params;
   const path = toRelativePath(workspacePath, documentPath) || documentPath;
-  return { path, pos: pos ?? docContentSize, isDocEmpty };
+  return {
+    path,
+    pos: pos ?? docContentSize,
+    isDocEmpty,
+    ...(reference ? { reference } : {}),
+  };
 }
 
 /**

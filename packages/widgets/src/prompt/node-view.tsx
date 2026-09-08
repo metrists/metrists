@@ -38,6 +38,7 @@ import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { AiPromptNodeBase, PROMPT_NODE_NAME } from "./node";
 import { UI_ONLY_TRANSACTION_META } from "../define-widget";
 import {
+  deleteWidgetTr,
   docHasPromptNode,
   docHasRealContent,
   findPromptNodeId,
@@ -46,9 +47,11 @@ import {
   removeToParagraphTr,
   revertToSlashTr,
   selectionDraft,
+  selectionSummonTr,
   slashSummonTr,
   trailingParagraphTr,
 } from "./doc-helpers";
+import type { PromptReference } from "./doc-helpers";
 import { PromptBlob } from "./ui/prompt-blob";
 import { adoptPersistedPromptBinding } from "./store";
 import {
@@ -251,7 +254,16 @@ function AiPromptNodeView(props: NodeViewProps) {
   const removeNode = (options?: {
     insertSlash?: boolean;
     restoreParagraph?: boolean;
+    restoreCaret?: boolean;
   }) => {
+    if (options?.restoreCaret) {
+      const pos = props.getPos();
+      if (typeof pos !== "number") return;
+      const { view } = props.editor;
+      view.dispatch(deleteWidgetTr(view.state, pos, props.node.nodeSize));
+      props.editor.commands.focus(undefined, { scrollIntoView: false });
+      return;
+    }
     if (options?.restoreParagraph) {
       const pos = props.getPos();
       if (typeof pos !== "number") return;
@@ -288,6 +300,16 @@ function AiPromptNodeView(props: NodeViewProps) {
         editor={props.editor}
         getPos={props.getPos}
         summoned={Boolean(props.node.attrs.summoned)}
+        reference={
+          (props.node.attrs.reference as PromptReference | null) ?? null
+        }
+        // Removing the quote turns this into a regular widget: the
+        // reference stops riding future sends, and `summoned` drops with
+        // it so the dismiss gestures stop treating the node as a summon
+        // (there is no selection left to hand the caret back to).
+        clearReference={() =>
+          props.updateAttributes({ reference: null, summoned: false })
+        }
         removeNode={removeNode}
         onSessionBound={(taskId) => props.updateAttributes({ taskId })}
         draft={
@@ -520,6 +542,19 @@ export const AiPromptNode = AiPromptNodeBase.extend<AiPromptNodeOptions>({
             // contract — a second "/" in an empty summoned draft — is the
             // composer key map's, in the widget's own chrome.)
             if (selectionDraft(view.state)) return false;
+            // A non-empty selection: "/" summons a widget that REFERENCES
+            // the selected text (inserted after its block, selection left
+            // intact in the doc). Read from view.state.selection, not the
+            // handler's from/to args — those describe the replacement
+            // range. When the summon can't apply, fall through to typing
+            // "/" normally (which replaces the selection, as before).
+            if (!view.state.selection.empty) {
+              const blobId = newPromptBlobInstanceId();
+              const tr = selectionSummonTr(view.state, blobId);
+              if (!tr) return false;
+              view.dispatch(selectDraftTr(tr, blobId));
+              return true;
+            }
             // Empty doc: the keeper widget is already there — "/" means
             // "give me the prompt", so move the caret into it instead of
             // inserting a second one (or a stray slash).

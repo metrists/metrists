@@ -12,6 +12,19 @@
   }
 }
 
+/* Waiting states pulse the hollow punch by breathing the hole's size —
+   never its opacity, which would tint the center with the bump's color
+   and read as a solid core. */
+@keyframes nf-minimap-punch-pulse {
+  0%,
+  100% {
+    r: 1.75px;
+  }
+  50% {
+    r: 1px;
+  }
+}
+
 /* A heartbeat, not a resize: the wave winds up briefly, bursts outward
    past the bump's edge while fading to nothing, then rests until the next
    beat. Per-keyframe easing keeps it punchy rather than linear. */

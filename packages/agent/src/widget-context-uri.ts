@@ -16,10 +16,20 @@ export interface WidgetContextRef {
   /** Raw ProseMirror position at send time, used as-is at read time — no
    *  fuzzy re-anchoring (see document-outline.ts). */
   pos: number;
+  /** Capture-time ProseMirror range of the selection this prompt
+   *  referenced (the quoted passage at the top of the prompt text). Two
+   *  integers, so the URI stays self-contained — the text itself travels
+   *  as a markdown blockquote in the prompt. Named exactly like the
+   *  resource payload field it becomes. */
+  selectedRange?: { from: number; to: number };
 }
 
 export function encodeWidgetContextUri(ref: WidgetContextRef): string {
   const params = new URLSearchParams({ path: ref.path, pos: String(ref.pos) });
+  if (ref.selectedRange) {
+    params.set("from", String(ref.selectedRange.from));
+    params.set("to", String(ref.selectedRange.to));
+  }
   return `${WIDGET_CONTEXT_SCHEME}?${params.toString()}`;
 }
 
@@ -34,5 +44,14 @@ export function decodeWidgetContextUri(
   if (!path || posRaw === null) return undefined;
   const pos = Number(posRaw);
   if (!Number.isFinite(pos)) return undefined;
-  return { path, pos };
+  const from = Number(params.get("from"));
+  const to = Number(params.get("to"));
+  const range =
+    params.has("from") &&
+    params.has("to") &&
+    Number.isFinite(from) &&
+    Number.isFinite(to)
+      ? { selectedRange: { from, to } }
+      : {};
+  return { path, pos, ...range };
 }

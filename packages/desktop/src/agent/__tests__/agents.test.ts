@@ -31,10 +31,10 @@ vi.mock("@/utils/history-service", () => ({
   checkpointWorkspaceHistory: vi.fn().mockResolvedValue(null),
 }));
 
-import { createLoopbackPair } from "@notefig/agent";
+import { createLoopbackPair, decodeWidgetContextUri } from "@notefig/agent";
 import { FakeAgent } from "../mock-harness";
 import { TaskManager } from "../agent-service";
-import { agents } from "../agents";
+import { agents, splitLeadingQuote } from "../agents";
 import {
   agentEntriesCollection,
   agentPermissionRequestsCollection,
@@ -157,6 +157,45 @@ describe("agents facade (Stage 1)", () => {
     expect(resourceLink?.uri).toContain("pos=42");
   });
 
+  it("task(id).promptFromWidget() quotes a captured reference and carries its range in the URI", async () => {
+    const [client, agentSide] = createLoopbackPair();
+    const agent = new FakeAgent(agentSide);
+    let promptParams: unknown;
+    agent.onPrompt = async (params) => {
+      promptParams = params;
+      return { stopReason: "end_turn" };
+    };
+
+    const task = new TaskManager("/ws").createTask(harness);
+    await task.start(() => client);
+
+    await agents.task(task.taskId).promptFromWidget("shorten this", {
+      path: "notes.md",
+      pos: 42,
+      isDocEmpty: false,
+      reference: { text: "first line\nsecond line", from: 3, to: 25 },
+    }).completed;
+
+    const prompt = (
+      promptParams as {
+        prompt: Array<{ type: string; text?: string; uri?: string }>;
+      }
+    ).prompt;
+    // The referenced passage leads the prompt as a markdown blockquote.
+    expect(prompt[0]).toEqual({
+      type: "text",
+      text: "> first line\n> second line\n\nshorten this",
+    });
+    // The URI carries only the capture-time range, never the text.
+    const resourceLink = prompt.find((b) => b.type === "resource_link");
+    expect(resourceLink?.uri).not.toContain("first");
+    expect(decodeWidgetContextUri(resourceLink!.uri!)).toEqual({
+      path: "notes.md",
+      pos: 42,
+      selectedRange: { from: 3, to: 25 },
+    });
+  });
+
   it("task(id).promptFromWidget() embeds an empty-doc framing sentence and sends no context parts", async () => {
     const [client, agentSide] = createLoopbackPair();
     const agent = new FakeAgent(agentSide);
@@ -244,5 +283,35 @@ describe("task reachability (MET-163)", () => {
       updatedAt: Date.now(),
     });
     expect(await agents.task("task_sessionless").isReachable()).toBe(false);
+  });
+});
+
+describe("splitLeadingQuote", () => {
+  it("splits a leading blockquote off the prompt", () => {
+    expect(splitLeadingQuote("> quoted line\n> second\n\nask me")).toEqual({
+      quote: "quoted line\nsecond",
+      rest: "ask me",
+    });
+  });
+
+  it("leaves prompts without a leading quote untouched", () => {
+    expect(splitLeadingQuote("ask about > this")).toEqual({
+      quote: null,
+      rest: "ask about > this",
+    });
+  });
+
+  it("leaves a mid-prompt quote in the rest", () => {
+    expect(splitLeadingQuote("intro\n> not a reference")).toEqual({
+      quote: null,
+      rest: "intro\n> not a reference",
+    });
+  });
+
+  it("handles a quote-only prompt", () => {
+    expect(splitLeadingQuote("> only quote")).toEqual({
+      quote: "only quote",
+      rest: "",
+    });
   });
 });

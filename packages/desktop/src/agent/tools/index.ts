@@ -1,6 +1,7 @@
 import type { AgentTool } from "@notefig/agent";
 import { workspaceListDocuments } from "./workspace-list-documents";
 import { workspaceReadDocument } from "./workspace-read-document";
+import { documentReadRange } from "./document-read-range";
 import { workspaceOpenFiles } from "./workspace-open-files";
 import { historyLog } from "./history-log";
 import { historyDiff } from "./history-diff";
@@ -20,6 +21,7 @@ import { widgetRespond } from "./widget-respond";
 export const toolRegistry: readonly AgentTool<unknown, unknown>[] = [
   workspaceListDocuments,
   workspaceReadDocument,
+  documentReadRange,
   workspaceOpenFiles,
   historyLog,
   historyDiff,

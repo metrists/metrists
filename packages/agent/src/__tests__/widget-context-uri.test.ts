@@ -22,6 +22,36 @@ describe("encodeWidgetContextUri / decodeWidgetContextUri", () => {
     });
   });
 
+  it("round-trips a referenced from/to range, and omits it without one", () => {
+    const withRange = encodeWidgetContextUri({
+      path: "notes.md",
+      pos: 42,
+      selectedRange: { from: 4, to: 9 },
+    });
+    expect(decodeWidgetContextUri(withRange)).toEqual({
+      path: "notes.md",
+      pos: 42,
+      selectedRange: { from: 4, to: 9 },
+    });
+    const without = encodeWidgetContextUri({ path: "notes.md", pos: 42 });
+    expect(without).not.toContain("from");
+    expect(decodeWidgetContextUri(without)).toEqual({
+      path: "notes.md",
+      pos: 42,
+    });
+  });
+
+  it("drops a half-present or non-numeric range instead of failing", () => {
+    expect(
+      decodeWidgetContextUri("notefig://widget-context?path=a.md&pos=1&from=4"),
+    ).toEqual({ path: "a.md", pos: 1 });
+    expect(
+      decodeWidgetContextUri(
+        "notefig://widget-context?path=a.md&pos=1&from=4&to=x",
+      ),
+    ).toEqual({ path: "a.md", pos: 1 });
+  });
+
   it("returns undefined for a uri outside the widget-context scheme", () => {
     expect(decodeWidgetContextUri("file:///ws/notes.md")).toBeUndefined();
   });

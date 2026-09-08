@@ -10,7 +10,12 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { Editor } from "@tiptap/core";
 import { editorExtensions } from "@/components/editor/tiptap-editor-kit";
 import { widgetRendererNodes } from "@notefig/widgets";
-import { removeToParagraphTr, revertToSlashTr } from "@notefig/widgets";
+import {
+  deleteWidgetTr,
+  MAX_REFERENCE_CHARS,
+  removeToParagraphTr,
+  revertToSlashTr,
+} from "@notefig/widgets";
 import { createMarkdownCodec } from "@/components/editor/markdown-codec";
 import { getEditorMarkdown } from "@/components/editor/use-editor-file-sync";
 import { selectionDraft, registerMentionService } from "@notefig/widgets";
@@ -368,6 +373,90 @@ describe('"/" summon', () => {
     expect(findPromptNode(editor)).toBeNull();
     editor.commands.undo();
     expect(findPromptNode(editor)?.blobId).toBe(node.blobId);
+  });
+});
+
+function promptNodeReference(
+  target: Editor,
+): { text: string; from: number; to: number } | null {
+  const node = findPromptNode(target);
+  if (!node) return null;
+  return (
+    (target.state.doc.nodeAt(node.pos)?.attrs.reference as {
+      text: string;
+      from: number;
+      to: number;
+    } | null) ?? null
+  );
+}
+
+describe('"/" summon over a selection (doc references)', () => {
+  it("summons below the block, captures the selection, leaves the text intact", async () => {
+    editor = await documentEditor("<p>Hi there</p><p>More prose</p>");
+    editor.commands.setTextSelection({ from: 4, to: 9 }); // "there"
+    expect(typeText(editor, "/")).toBe(true);
+    const node = findPromptNode(editor)!;
+    expect(node.summoned).toBe(true);
+    // The selected text was referenced, not replaced — the file is unchanged.
+    expect(getEditorMarkdown(editor)).toBe("Hi there\n\nMore prose");
+    expect(promptNodeReference(editor)).toEqual({
+      text: "there",
+      from: 4,
+      to: 9,
+    });
+    // The widget sits between the two paragraphs (after the selection's block).
+    expect(node.pos).toBe(10);
+    expect(selectionDraft(editor.state)?.blobId).toBe(node.blobId);
+  });
+
+  it("captures a multi-block selection joined with newlines", async () => {
+    editor = await documentEditor("<p>One two</p><p>Three four</p>");
+    editor.commands.setTextSelection({ from: 5, to: 15 }); // "two\nThree"
+    expect(typeText(editor, "/")).toBe(true);
+    expect(promptNodeReference(editor)?.text).toBe("two\nThree");
+    // Inserted after the SECOND paragraph — the block the selection ends in.
+    expect(findPromptNode(editor)!.pos).toBe(21);
+    expect(getEditorMarkdown(editor)).toBe("One two\n\nThree four");
+  });
+
+  it("lets '/' replace a whitespace-only selection as ordinary typing", async () => {
+    editor = await documentEditor("<p>Hi there</p>");
+    editor.commands.setTextSelection({ from: 3, to: 4 }); // the space
+    expect(typeText(editor, "/")).toBe(false);
+    expect(findPromptNode(editor)).toBeNull();
+  });
+
+  it("dismisses by deletion — no literal '/', no stray paragraph, caret restored", async () => {
+    editor = await documentEditor("<p>Hi there</p>");
+    editor.commands.setTextSelection({ from: 4, to: 9 });
+    typeText(editor, "/");
+    const node = findPromptNode(editor)!;
+    editor.view.dispatch(deleteWidgetTr(editor.state, node.pos, node.nodeSize));
+    expect(findPromptNode(editor)).toBeNull();
+    expect(getEditorMarkdown(editor)).toBe("Hi there");
+    // Caret lands at the end of the block the selection lived in.
+    expect(editor.state.selection.from).toBe(9);
+    expect(editor.state.selection.empty).toBe(true);
+  });
+
+  it("undo removes the widget and keeps the document text", async () => {
+    editor = await documentEditor("<p>Hi there</p>");
+    editor.commands.setTextSelection({ from: 4, to: 9 });
+    typeText(editor, "/");
+    expect(findPromptNode(editor)).not.toBeNull();
+    editor.commands.undo();
+    expect(findPromptNode(editor)).toBeNull();
+    expect(getEditorMarkdown(editor)).toBe("Hi there");
+  });
+
+  it("caps a pathological selection at MAX_REFERENCE_CHARS", async () => {
+    const long = "x".repeat(MAX_REFERENCE_CHARS + 500);
+    editor = await documentEditor(`<p>${long}</p>`);
+    editor.commands.setTextSelection({ from: 1, to: long.length + 1 });
+    expect(typeText(editor, "/")).toBe(true);
+    expect(promptNodeReference(editor)?.text.length).toBe(MAX_REFERENCE_CHARS);
+    // The range still describes the full selection, only the text is capped.
+    expect(promptNodeReference(editor)?.to).toBe(long.length + 1);
   });
 });
 

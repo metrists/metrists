@@ -53,7 +53,16 @@ export interface AgentTaskHandle {
    */
   promptFromWidget(
     text: string,
-    widget: { path: string; pos: number; isDocEmpty: boolean },
+    widget: {
+      path: string;
+      pos: number;
+      isDocEmpty: boolean;
+      /** The selection the widget was summoned over (doc references) —
+       *  quoted into the prompt text as a markdown blockquote, with its
+       *  capture-time range riding the context URI so the agent can hand
+       *  the same from/to to `document_read_range`. */
+      reference?: { text: string; from: number; to: number };
+    },
     /** Additional parts riding along with the widget context — file
      *  @-mentions (MET-80). Kept even on the empty-doc branch, which
      *  otherwise carries no contextParts. */
@@ -141,8 +150,26 @@ function taskHandle(taskId: string): AgentTaskHandle {
       const uri = encodeWidgetContextUri({
         path: widget.path,
         pos: widget.pos,
+        ...(widget.reference
+          ? {
+              selectedRange: {
+                from: widget.reference.from,
+                to: widget.reference.to,
+              },
+            }
+          : {}),
       });
-      return promptImpl(text, {
+      // The referenced passage leads the prompt as a markdown blockquote —
+      // visible to the agent AND rendered as a quote in the chat transcript
+      // (the second deliberately-embedded exception, like the empty-doc
+      // framing above: the quote IS part of what the user said).
+      const quoted = widget.reference
+        ? `${widget.reference.text
+            .split("\n")
+            .map((line) => `> ${line}`)
+            .join("\n")}\n\n${text}`
+        : text;
+      return promptImpl(quoted, {
         contextParts: [
           { kind: "resource_link", path: uri },
           ...extraContextParts,
@@ -214,3 +241,28 @@ export const agents = {
   turn: turnHandle,
   workspace: workspaceHandle,
 };
+
+/**
+ * The inverse of promptFromWidget's quote prepend, kept beside it: a prompt
+ * sent from a summoned-over-selection widget opens with a markdown
+ * blockquote of the referenced passage. The quote is part of what the agent
+ * receives, but not part of what the user "said" — consumers that present
+ * the prompt back (the chat bubble, the session name derived from the first
+ * prompt) split it off with this. Only a LEADING quote is the convention;
+ * quotes mid-prompt are the user's own text.
+ */
+export function splitLeadingQuote(text: string): {
+  quote: string | null;
+  rest: string;
+} {
+  const lines = text.split("\n");
+  let end = 0;
+  while (end < lines.length && /^> ?/.test(lines[end])) end++;
+  if (end === 0) return { quote: null, rest: text };
+  const quote = lines
+    .slice(0, end)
+    .map((line) => line.replace(/^> ?/, ""))
+    .join("\n");
+  const rest = lines.slice(end).join("\n").replace(/^\n+/, "");
+  return { quote, rest };
+}

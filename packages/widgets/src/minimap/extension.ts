@@ -10,7 +10,6 @@ import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { MinimapRailView } from "./rail-view";
 import type { MinimapSource } from "./contract";
-import "./minimap.css";
 
 export interface WidgetMinimapOptions {
   sources: Record<string, MinimapSource>;
