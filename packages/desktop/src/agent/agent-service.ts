@@ -13,6 +13,8 @@ import {
   BUILT_IN_HARNESSES,
   composePrompt,
   MCP_SERVER_NAME,
+  harnessAdapterFor,
+  type HarnessSpawnPrep,
   parseCustomHarnessEntries,
   parseHarnessOverrides,
   resolveEffectiveHarnesses,
@@ -28,6 +30,7 @@ import {
 import { platformAdapter } from "@/adapters";
 import { resolveWorkspacePath } from "@/utils/fs";
 import { path as pathutil, workspaceKey } from "@/utils/path";
+import { APP_DIR_NAME } from "@/utils/app-dir";
 import { getOrCreateKvCollection } from "@/utils/kv-store";
 import { MarkdownJoiner } from "@/lib/markdown-joiner-transform";
 import { PermissionBroker } from "./permission-broker";
@@ -161,31 +164,6 @@ export function contentBlockText(content: ContentBlock): string {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Layer `overlay` onto `base` with OpenCode's own config-merge semantics
- * (`mergeConfigConcatArrays`): objects merge recursively, arrays
- * concatenate, scalars from the overlay win. Used to combine a harness
- * env override's `OPENCODE_CONFIG_CONTENT` with our app-tools entry so
- * neither side's nested keys (e.g. the `mcp` map) clobber the other's.
- */
-function deepMergeConfigs(
-  base: Record<string, unknown>,
-  overlay: Record<string, unknown>,
-): Record<string, unknown> {
-  const merged: Record<string, unknown> = { ...base };
-  for (const [key, value] of Object.entries(overlay)) {
-    const existing = merged[key];
-    if (isPlainObject(existing) && isPlainObject(value)) {
-      merged[key] = deepMergeConfigs(existing, value);
-    } else if (Array.isArray(existing) && Array.isArray(value)) {
-      merged[key] = [...existing, ...value];
-    } else {
-      merged[key] = value;
-    }
-  }
-  return merged;
 }
 
 /**
@@ -330,6 +308,9 @@ export class AgentTask {
   private readonly unsubscribers: Array<() => void> = [];
   /** Stage 3.5: this task's app-tools MCP endpoint; torn down in dispose(). */
   private mcpEndpoint: McpEndpoint | null = null;
+  /** What this harness's adapter settled at invoke time (spawn env applied,
+   *  wire pass-through pending); null until the task starts. */
+  private spawnPrep: HarnessSpawnPrep | null = null;
 
   constructor(
     readonly taskId: string,
@@ -344,10 +325,9 @@ export class AgentTask {
   /**
    * Spawn transport + connect ACP + create the session. Takes a transport
    * *factory* rather than a transport: the app-tools MCP channel must be
-   * live before the harness process spawns, because some harnesses learn
-   * about the MCP server through their spawn environment
-   * (`mcpRegistration: "opencode-config"` → inline config passed via
-   * `OPENCODE_CONFIG_CONTENT`) rather than through `session/new.mcpServers`.
+   * live before the harness process spawns, because the harness adapter's
+   * invoke hook may need the endpoint's address in the spawn env or in a
+   * file on disk, not only on the wire in `session/new.mcpServers`.
    */
   async start(
     createTransport: (spec: {
@@ -400,11 +380,22 @@ export class AgentTask {
         ),
       );
 
-      const extraEnv = this.prepareHarnessMcpRegistration(
-        mcpEndpoint.mcpServer,
-      );
+      // The harness's own invoke hook runs here: whatever its dialect needs
+      // in place before the process exists (a config file on disk, env to
+      // inject) happens inside the adapter — this code reads none of it.
+      const prep = await harnessAdapterFor(this.harness).onInvoke({
+        workspacePath: this.workspacePath,
+        joinPath: (...parts) => pathutil.join(...parts),
+        // The app dir is the app's own; the harness apparatus holds no copy.
+        appDir: APP_DIR_NAME,
+        harnessEnv: this.harness.env,
+        mcpServer: mcpEndpoint.mcpServer,
+        writeFiles: (files) => platformAdapter.fs.writeFiles(files),
+        warn: (label, detail) => this.warn(label, detail),
+      });
+      this.spawnPrep = prep;
 
-      const transport = createTransport({ extraEnv });
+      const transport = createTransport({ extraEnv: prep.env });
       this.transport = transport;
       this.unsubscribers.push(
         transport.onClose((error) => this.handleTransportClose(error)),
@@ -450,7 +441,11 @@ export class AgentTask {
         );
       } else {
         const session = await withStartupTimeout(
-          this.client.newSession(this.agentCwd, mcpServers),
+          this.client.newSession(
+            this.agentCwd,
+            mcpServers,
+            this.spawnPrep?.sessionParams,
+          ),
           "session/new",
         );
         this.sessionId = session.sessionId;
@@ -500,14 +495,12 @@ export class AgentTask {
   }
 
   /**
-   * The mcpServers list for session/new and session/load — derived, not
-   * stored: only harnesses with verified session/new pass-through get the
-   * entry (capability matrix, not self-reported mcpCapabilities);
-   * "opencode-config" harnesses already got theirs via their spawn env.
+   * The mcpServers list for session/new and session/load. Read off what
+   * the harness adapter settled at invoke time rather than re-derived:
+   * whether the wire carries the server is the adapter's decision too.
    */
   private currentMcpServers(): McpServer[] {
-    return this.harness.mcpRegistration === "session-new" &&
-      this.mcpEndpoint?.mcpServer
+    return this.spawnPrep?.passThroughSessionNew && this.mcpEndpoint?.mcpServer
       ? [this.mcpEndpoint.mcpServer]
       : [];
   }
@@ -571,7 +564,12 @@ export class AgentTask {
           );
         });
       }
-      await this.client.loadSession(sessionId, this.agentCwd, mcpServers);
+      await this.client.loadSession(
+        sessionId,
+        this.agentCwd,
+        mcpServers,
+        this.spawnPrep?.sessionParams,
+      );
       // The transport can die while the load is in flight —
       // handleTransportClose drops the staged turn and marks the task
       // errored. Committing the replay past that would hand the caller an
@@ -595,58 +593,6 @@ export class AgentTask {
       );
     } finally {
       this.currentTurn = null;
-    }
-  }
-
-  /**
-   * Pre-spawn MCP registration for harnesses that don't take
-   * `session/new.mcpServers`. For "opencode-config": inject the app-tools
-   * server as `OPENCODE_CONFIG_CONTENT` — inline JSON that OpenCode merges
-   * last, on top of the user's own global / `OPENCODE_CONFIG` / project
-   * configs (merge order verified against opencode 1.18.15, MET-65). A
-   * value instead of a file: nothing lands in the workspace, nothing to
-   * clean up in dispose, and browser transports carry it as plain env (the
-   * embedded relay command is already worker-local, so no path rewriting).
-   */
-  private prepareHarnessMcpRegistration(
-    mcpServer: McpServer | undefined,
-  ): Record<string, string> {
-    if (
-      this.harness.mcpRegistration !== "opencode-config" ||
-      !mcpServer ||
-      !("command" in mcpServer) // only the stdio variant maps to an OpenCode "local" entry
-    ) {
-      return {};
-    }
-    const environment: Record<string, string> = {};
-    for (const entry of mcpServer.env ?? [])
-      environment[entry.name] = entry.value;
-    const config = deepMergeConfigs(this.harnessConfigContent(), {
-      $schema: "https://opencode.ai/config.json",
-      mcp: {
-        [mcpServer.name]: {
-          type: "local",
-          command: [mcpServer.command, ...mcpServer.args],
-          enabled: true,
-          environment,
-        },
-      },
-    });
-    return { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) };
-  }
-
-  /** A harness env override may carry its own `OPENCODE_CONFIG_CONTENT`;
-   * ours must layer on top of it rather than clobber it (extraEnv wins the
-   * spawn-env merge on every platform). Unparseable content degrades to
-   * `{}` — OpenCode itself would reject it too. */
-  private harnessConfigContent(): Record<string, unknown> {
-    const raw = this.harness.env.OPENCODE_CONFIG_CONTENT;
-    if (!raw) return {};
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      return isPlainObject(parsed) ? parsed : {};
-    } catch {
-      return {};
     }
   }
 

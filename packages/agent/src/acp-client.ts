@@ -138,8 +138,15 @@ export class NotefigAcpClient implements Client {
   async newSession(
     cwd: string,
     mcpServers: McpServer[] = [],
+    /** Harness-specific extension fields (e.g. devin's
+     *  `additionalDirectories`), spread into the request verbatim. */
+    extensionParams: Record<string, unknown> = {},
   ): Promise<NewSessionResponse> {
-    return this.requireConnection().newSession({ cwd, mcpServers });
+    return this.requireConnection().newSession({
+      cwd,
+      mcpServers,
+      ...extensionParams,
+    });
   }
 
   /**
@@ -152,8 +159,16 @@ export class NotefigAcpClient implements Client {
     sessionId: string,
     cwd: string,
     mcpServers: McpServer[] = [],
+    /** Same extension spread as newSession — a session revived without the
+     *  fields it was created with would drop what they granted. */
+    extensionParams: Record<string, unknown> = {},
   ): Promise<LoadSessionResponse> {
-    return this.requireConnection().loadSession({ sessionId, cwd, mcpServers });
+    return this.requireConnection().loadSession({
+      sessionId,
+      cwd,
+      mcpServers,
+      ...extensionParams,
+    });
   }
 
   async prompt(

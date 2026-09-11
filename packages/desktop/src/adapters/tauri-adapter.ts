@@ -30,6 +30,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type { HarnessDefinition } from "@notefig/shared/agent";
+import { resolveHarnessSpawn } from "@notefig/shared/agent";
 import type { AgentTransport, McpEndpoint } from "@notefig/agent";
 import { TauriStdioTransport } from "@/agent/tauri-stdio-transport";
 import { TauriMcpTransport } from "@/agent/tauri-mcp-transport";
@@ -660,15 +661,14 @@ export class TauriPlatformAdapter implements IPlatformAdapter {
     workspacePath: string;
     extraEnv?: Record<string, string>;
   }): AgentTransport {
+    // Templating + cwd default are the harness definition's own business
+    // (resolveHarnessSpawn) — this adapter just hands them to the process.
+    const spawn = resolveHarnessSpawn(spec.harness, spec.workspacePath);
     return new TauriStdioTransport({
       procId: spec.taskId,
       program: spec.harness.command,
-      // `${workspace}` placeholder → the actual workspace path (e.g.
-      // OpenCode's `acp --cwd ${workspace}`).
-      args: spec.harness.args.map((arg) =>
-        arg.split("${workspace}").join(spec.workspacePath),
-      ),
-      cwd: spec.workspacePath,
+      args: spawn.args,
+      cwd: spawn.cwd,
       env: { ...spec.harness.env, ...spec.extraEnv },
     });
   }
