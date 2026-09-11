@@ -2,23 +2,49 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock the platform adapter singleton the file-sync helpers and task service use.
 // vi.hoisted so the fns exist before the hoisted vi.mock factory runs.
-const { writeFiles, readFiles, deleteFiles, mcpEndpoints } = vi.hoisted(() => ({
-  writeFiles: vi.fn(async (files: { path: string; content: string }[]) => ({
-    succeeded: files.map((f) => f.path),
-    failed: [] as unknown[],
-  })),
-  readFiles: vi.fn(async (paths: string[]) => ({
-    succeeded: paths.map((p) => ({ path: p, content: "old contents\n" })),
-    failed: [] as unknown[],
-  })),
-  deleteFiles: vi.fn(async (paths: string[]) => ({
-    succeeded: paths,
-    failed: [] as unknown[],
-  })),
-  // Every McpEndpoint the fake constructs, in order — lets dispose tests
-  // assert the endpoint's close() ran.
-  mcpEndpoints: [] as { close: ReturnType<typeof vi.fn> }[],
-}));
+const {
+  writeFiles,
+  readFiles,
+  deleteFiles,
+  mcpEndpoints,
+  configDisk,
+  relayToken,
+} = vi.hoisted(() => {
+  // A tiny in-memory disk, consulted only for the devin project config:
+  // the path a task writes is the one the next read sees, so those tests
+  // exercise the real read-merge-write round trip while every other
+  // caller keeps the flat stub responses below.
+  const configDisk = new Map<string, string>();
+  const isConfig = (path: string) => path.endsWith("mcp_config.local.json");
+  return {
+    configDisk,
+    writeFiles: vi.fn(async (files: { path: string; content: string }[]) => {
+      for (const file of files)
+        if (isConfig(file.path)) configDisk.set(file.path, file.content);
+      return { succeeded: files.map((f) => f.path), failed: [] as unknown[] };
+    }),
+    readFiles: vi.fn(async (paths: string[]) => ({
+      succeeded: paths.flatMap((p) =>
+        isConfig(p)
+          ? configDisk.has(p)
+            ? [{ path: p, content: configDisk.get(p)! }]
+            : []
+          : [{ path: p, content: "old contents\n" }],
+      ),
+      failed: [] as unknown[],
+    })),
+    deleteFiles: vi.fn(async (paths: string[]) => {
+      for (const path of paths) configDisk.delete(path);
+      return { succeeded: paths, failed: [] as unknown[] };
+    }),
+    // Every McpEndpoint the fake constructs, in order — lets dispose tests
+    // assert the endpoint's close() ran.
+    mcpEndpoints: [] as { close: ReturnType<typeof vi.fn> }[],
+    // The per-task connection token the real relay mints per endpoint; tests
+    // set it to prove two tasks in one workspace stay on their own relay.
+    relayToken: { value: "tok-1" },
+  };
+});
 vi.mock("@/adapters", async () => ({
   platformAdapter: {
     db: (await import("@/testing/node-db")).createNodeTestDb(),
@@ -36,7 +62,14 @@ vi.mock("@/adapters", async () => ({
       // — AgentTask.start() calls .start() and reads .mcpServer itself.
       createMcpEndpoint: vi.fn(() => {
         const endpoint = {
-          mcpServer: { name: "notefig", command: "notefig", args: [], env: [] },
+          // Shaped like the real relay: a constant command plus per-task
+          // args/env (mcp_bridge.rs mints a port and token per endpoint).
+          mcpServer: {
+            name: "notefig",
+            command: "notefig",
+            args: ["--relay"],
+            env: [{ name: "NOTEFIG_MCP_TOKEN", value: relayToken.value }],
+          },
           start: vi.fn(async () => {}),
           onRequest: vi.fn(() => () => {}),
           close: vi.fn(async () => {}),
@@ -67,6 +100,7 @@ import {
   agentTasksCollection,
 } from "../agent-collections";
 import { BUILT_IN_HARNESSES } from "@notefig/shared/agent";
+import { APP_DIR_NAME } from "@/utils/app-dir";
 import type { AgentTask } from "../agent-service";
 
 const harness = BUILT_IN_HARNESSES[0];
@@ -1371,6 +1405,14 @@ describe("task updatedAt (last-activity ordering, MET-48)", () => {
 describe("Stage 4: per-harness MCP registration", () => {
   const opencodeHarness = BUILT_IN_HARNESSES.find((h) => h.id === "opencode")!;
   const geminiHarness = BUILT_IN_HARNESSES.find((h) => h.id === "gemini-cli")!;
+  const devinHarness = BUILT_IN_HARNESSES.find((h) => h.id === "devin")!;
+  const claudeHarness = BUILT_IN_HARNESSES.find((h) => h.id === "claude-code")!;
+  const DEVIN_CONFIG_PATH = `/ws/${APP_DIR_NAME}/.devin/mcp_config.local.json`;
+
+  beforeEach(() => {
+    configDisk.clear();
+    relayToken.value = "tok-1";
+  });
 
   it('"session-new" harnesses get the server through session/new.mcpServers', async () => {
     const [client, agentSide] = createLoopbackPair();
@@ -1382,7 +1424,48 @@ describe("Stage 4: per-harness MCP registration", () => {
     expect(agent.newSessionParams?.mcpServers?.[0]?.name).toBe("notefig");
   });
 
-  it('"opencode-config" harnesses get OPENCODE_CONFIG_CONTENT in spawn env (no file), and empty mcpServers', async () => {
+  it("writes a plan's files before the harness spawns, and passes its env", async () => {
+    const [client, agentSide] = createLoopbackPair();
+    const agent = new FakeAgent(agentSide);
+    let capturedEnv: Record<string, string> | undefined;
+    // devin's dialect is the one that needs both halves; what each dialect
+    // PRODUCES is the harness adapters' own business (tested there).
+    const task = new TaskManager("/ws").createTask(devinHarness);
+    await task.start(({ extraEnv }) => {
+      capturedEnv = extraEnv;
+      return client;
+    });
+
+    const [written] = writeFiles.mock.calls.at(-1)![0];
+    expect(written.path).toBe(DEVIN_CONFIG_PATH);
+    expect(JSON.parse(written.content).mcpServers.notefig.command).toBe(
+      "notefig",
+    );
+    expect(capturedEnv).toEqual({
+      NOTEFIG_MCP_ARG_0: "--relay",
+      NOTEFIG_MCP_TOKEN: "tok-1",
+    });
+    // A file-carrying plan is registration enough — nothing on the wire.
+    expect(agent.newSessionParams?.mcpServers).toEqual([]);
+  });
+
+  it("claims the app dir in devin's session so the toolbox sees that file", async () => {
+    // Devin assembles the model's tool set from the SESSION's config scopes;
+    // a config that is merely on disk connects but never reaches the model.
+    // The adapter's sessionParams must therefore reach the ACP wire.
+    const [client, agentSide] = createLoopbackPair();
+    const agent = new FakeAgent(agentSide);
+    const task = new TaskManager("/ws").createTask(devinHarness);
+    await task.start(() => client);
+
+    expect(
+      (agent.newSessionParams as { additionalDirectories?: string[] })
+        ?.additionalDirectories,
+    ).toEqual([`/ws/${APP_DIR_NAME}`]);
+    expect(DEVIN_CONFIG_PATH.startsWith(`/ws/${APP_DIR_NAME}/`)).toBe(true);
+  });
+
+  it("passes an env-only plan through without touching the disk", async () => {
     const [client, agentSide] = createLoopbackPair();
     const agent = new FakeAgent(agentSide);
     let capturedEnv: Record<string, string> | undefined;
@@ -1392,43 +1475,65 @@ describe("Stage 4: per-harness MCP registration", () => {
       return client;
     });
 
-    expect(capturedEnv?.OPENCODE_CONFIG).toBeUndefined();
-    const config = JSON.parse(capturedEnv!.OPENCODE_CONFIG_CONTENT);
-    expect(config.mcp.notefig.type).toBe("local");
-    expect(config.mcp.notefig.command).toEqual(["notefig"]);
+    expect(capturedEnv?.OPENCODE_CONFIG_CONTENT).toBeDefined();
     expect(writeFiles).not.toHaveBeenCalled();
     expect(agent.newSessionParams?.mcpServers).toEqual([]);
   });
 
-  it("deep-merges a harness-env OPENCODE_CONFIG_CONTENT under our mcp entry instead of clobbering it", async () => {
+  it("puts the server on the wire when the plan says to", async () => {
+    const [client, agentSide] = createLoopbackPair();
+    const agent = new FakeAgent(agentSide);
+    const task = new TaskManager("/ws").createTask(claudeHarness);
+    await task.start(() => client);
+
+    expect(agent.newSessionParams?.mcpServers).toHaveLength(1);
+    expect(writeFiles).not.toHaveBeenCalled();
+  });
+
+  it("two tasks in one workspace share the file but keep their own relay values", async () => {
+    const manager = new TaskManager("/ws");
+    const envs: Record<string, string>[] = [];
+    for (const token of ["tok-1", "tok-2"]) {
+      relayToken.value = token;
+      const [client, agentSide] = createLoopbackPair();
+      new FakeAgent(agentSide);
+      await manager.createTask(devinHarness).start(({ extraEnv }) => {
+        envs.push(extraEnv);
+        return client;
+      });
+    }
+
+    // Same bytes both times — neither task can clobber the other's relay.
+    expect(writeFiles.mock.calls.map(([files]) => files[0].content)).toEqual([
+      configDisk.get(DEVIN_CONFIG_PATH),
+      configDisk.get(DEVIN_CONFIG_PATH),
+    ]);
+    expect(envs[0].NOTEFIG_MCP_TOKEN).toBe("tok-1");
+    expect(envs[1].NOTEFIG_MCP_TOKEN).toBe("tok-2");
+  });
+
+  it("an unwritable plan spawns without app tools instead of failing the task", async () => {
+    writeFiles.mockResolvedValueOnce({
+      succeeded: [],
+      failed: [
+        {
+          path: DEVIN_CONFIG_PATH,
+          type: "permission_denied",
+          message: "denied",
+        },
+      ],
+    });
     const [client, agentSide] = createLoopbackPair();
     new FakeAgent(agentSide);
     let capturedEnv: Record<string, string> | undefined;
-    const task = new TaskManager("/ws").createTask({
-      ...opencodeHarness,
-      env: {
-        OPENCODE_CONFIG_CONTENT: JSON.stringify({
-          theme: "user-theme",
-          mcp: {
-            userServer: { type: "remote", url: "https://x.example" },
-            // Collides with the entry we inject: nested keys merge, our
-            // scalars win, foreign keys survive.
-            notefig: { enabled: false, timeout: 99 },
-          },
-        }),
-      },
-    });
+    const task = new TaskManager("/ws").createTask(devinHarness);
     await task.start(({ extraEnv }) => {
       capturedEnv = extraEnv;
       return client;
     });
 
-    const config = JSON.parse(capturedEnv!.OPENCODE_CONFIG_CONTENT);
-    expect(config.theme).toBe("user-theme");
-    expect(config.mcp.userServer.url).toBe("https://x.example");
-    expect(config.mcp.notefig.command).toEqual(["notefig"]);
-    expect(config.mcp.notefig.enabled).toBe(true); // ours wins the collision
-    expect(config.mcp.notefig.timeout).toBe(99); // theirs survives the merge
+    expect(capturedEnv).toEqual({});
+    expect(agentTasksCollection.get(task.taskId)?.status).toBe("idle");
   });
 
   it('"none" harnesses get neither', async () => {

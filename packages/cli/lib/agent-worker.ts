@@ -32,6 +32,7 @@ import {
   FrameCipher,
   MCP_SERVER_NAME,
   TUNNEL_PROTOCOL_VERSION,
+  resolveHarnessSpawn,
   TunnelEnvelopeSchema,
   deriveFrameKey,
   deriveSessionKey,
@@ -392,12 +393,14 @@ export class AgentWorker {
     // Adapters misbehave if they think they're inside Claude Code (same strip
     // the desktop host applies).
     delete env.CLAUDECODE;
-    const args = harness.args.map((arg) => arg.split('${workspace}').join(cwd));
+    // Templating + cwd default live with the harness definition
+    // (resolveHarnessSpawn) — the worker just hands them to the process.
+    const { args, cwd: spawnCwd } = resolveHarnessSpawn(harness, cwd);
 
     let child: ChildProcess;
     try {
       child = spawn(harness.command, args, {
-        cwd,
+        cwd: spawnCwd,
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
