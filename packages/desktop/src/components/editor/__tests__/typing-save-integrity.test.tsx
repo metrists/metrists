@@ -313,6 +313,7 @@ describe("typing → save → adoption loop integrity", () => {
 
     await handleContentFileSystemChange(
       {
+        watchId: "test-watch",
         changes: [
           {
             path: FILE,
@@ -340,6 +341,7 @@ describe("typing → save → adoption loop integrity", () => {
     });
     await handleContentFileSystemChange(
       {
+        watchId: "test-watch",
         changes: [
           {
             path: FILE,
@@ -378,6 +380,7 @@ describe("typing → save → adoption loop integrity", () => {
     // The late watcher echo of the early write arrives now.
     await handleContentFileSystemChange(
       {
+        watchId: "test-watch",
         changes: [
           {
             path: FILE,

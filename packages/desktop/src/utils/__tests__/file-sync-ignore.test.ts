@@ -57,6 +57,7 @@ describe("watcher event backstop", () => {
   it("drops created events for ignored paths without stat-ing them", async () => {
     await handleMetadataFileSystemChange(
       {
+        watchId: "test-watch",
         changes: [
           {
             type: "created",
@@ -78,6 +79,7 @@ describe("watcher event backstop", () => {
   it("still adopts created events for tracked paths", async () => {
     await handleMetadataFileSystemChange(
       {
+        watchId: "test-watch",
         changes: [{ type: "created", path: `${WS}/a.md`, isDirectory: false }],
       },
       WS,
@@ -90,6 +92,7 @@ describe("watcher event backstop", () => {
   it("treats a rename INTO ignored space as a delete of the old path", async () => {
     await handleMetadataFileSystemChange(
       {
+        watchId: "test-watch",
         changes: [{ type: "created", path: `${WS}/a.md`, isDirectory: false }],
       },
       WS,
@@ -97,6 +100,7 @@ describe("watcher event backstop", () => {
 
     await handleMetadataFileSystemChange(
       {
+        watchId: "test-watch",
         changes: [
           {
             type: "renamed",
@@ -117,6 +121,7 @@ describe("watcher event backstop", () => {
   it("treats a rename OUT of untracked space as a create at the new path", async () => {
     await handleMetadataFileSystemChange(
       {
+        watchId: "test-watch",
         changes: [
           {
             type: "renamed",

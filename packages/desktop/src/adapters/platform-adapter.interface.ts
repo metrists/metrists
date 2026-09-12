@@ -1,10 +1,7 @@
 import type { Theme } from "@/components/theme-provider";
 import type { PersistedCollectionPersistence } from "@tanstack/db-sqlite-persistence-core";
 import type { HarnessDefinition } from "@notefig/shared/agent";
-import type {
-  AgentTransport,
-  McpEndpoint,
-} from "@notefig/agent";
+import type { AgentTransport, McpEndpoint } from "@notefig/agent";
 
 export type FileSystemErrorType =
   | "not_found"
@@ -58,8 +55,7 @@ export interface DirectoryEntry {
 }
 
 export type Result<T, E = FileSystemError> =
-  | { ok: true; value: T }
-  | { ok: false; error: E };
+  { ok: true; value: T } | { ok: false; error: E };
 
 export type BatchResult<T> = {
   succeeded: T[];
@@ -90,6 +86,9 @@ export type MetadataChange = {
 };
 
 export type MetadataChangeEvent = {
+  /** The watch that produced this event — consumers route by it, so one
+   *  workspace's events never reach another's handlers (MET-177). */
+  watchId: string;
   changes: MetadataChange[];
 };
 
@@ -100,6 +99,8 @@ export type ContentChange = {
 };
 
 export type ContentChangeEvent = {
+  /** See MetadataChangeEvent.watchId. */
+  watchId: string;
   changes: ContentChange[];
 };
 

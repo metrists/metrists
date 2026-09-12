@@ -43,7 +43,7 @@ import type { FileEntry } from "@/utils/fs";
 import { IGNORE_RULES } from "@/utils/ignore";
 import { calculateContentHash } from "@/utils/hash";
 import { invalidateDerivedState } from "@/utils/file-write-effects";
-import { path as pathutil, relativeTreePath } from "@/utils/path";
+import { path as pathutil, relativeTreePath, workspaceKey } from "@/utils/path";
 import { queryClient } from "./query-client";
 
 // The shared QueryClient moved to the entities/query-client leaf; re-exported
@@ -140,8 +140,9 @@ export function createFileMetadataCollection(workspaceId: string) {
 
         // Merge, don't wipe: full-replace sync would erase hydrated stats
         // and self-write bookkeeping for rows the walk still sees.
-        const previousRows =
-          workspaceCollectionsRegistry.get(workspaceId)?.metadata;
+        const previousRows = workspaceCollectionsRegistry.get(
+          workspaceKey(workspaceId),
+        )?.metadata;
 
         return entries.map(({ path, type }) => {
           const stat = statMap.get(path);
@@ -415,6 +416,10 @@ export interface WorkspaceCollections {
   content: ReturnType<typeof createFileContentCollection>;
 }
 
+// Registry key vs value: all three maps below key by workspaceKey (the
+// canonical registry key, Windows respellings collapse), while the
+// collections themselves keep the first caller's spelling in their ids and
+// query keys — same convention as taskManagerRegistry / history / git.
 const workspaceCollectionsRegistry = new Map<string, WorkspaceCollections>();
 
 // ---------------------------------------------------------------------------
@@ -427,10 +432,10 @@ const hydratedDirsRegistry = new Map<string, Set<string>>();
 const hydrationInFlight = new Map<string, Promise<void>>();
 
 function hydratedDirsFor(workspaceId: string): Set<string> {
-  let dirs = hydratedDirsRegistry.get(workspaceId);
+  let dirs = hydratedDirsRegistry.get(workspaceKey(workspaceId));
   if (!dirs) {
     dirs = new Set();
-    hydratedDirsRegistry.set(workspaceId, dirs);
+    hydratedDirsRegistry.set(workspaceKey(workspaceId), dirs);
   }
   return dirs;
 }
@@ -442,7 +447,7 @@ function parentDirectory(path: string): string {
 
 /** Drop hydration bookkeeping for a directory subtree (delete/rename). */
 function pruneHydratedDirs(workspaceId: string, path: string): void {
-  const dirs = hydratedDirsRegistry.get(workspaceId);
+  const dirs = hydratedDirsRegistry.get(workspaceKey(workspaceId));
   if (!dirs) return;
   const prefix = path.endsWith("/") ? path : path + "/";
   for (const dir of dirs) {
@@ -468,7 +473,9 @@ export function hydrateDirectoryStats(
   if (inFlight) return inFlight;
 
   const promise = (async () => {
-    const collections = workspaceCollectionsRegistry.get(workspaceId);
+    const collections = workspaceCollectionsRegistry.get(
+      workspaceKey(workspaceId),
+    );
     if (!collections) return;
 
     const children = collections.metadata.toArray.filter((row) => {
@@ -506,7 +513,9 @@ if (import.meta.env.DEV) {
     workspaceId: string,
     filePath: string,
   ) => {
-    const collections = workspaceCollectionsRegistry.get(workspaceId);
+    const collections = workspaceCollectionsRegistry.get(
+      workspaceKey(workspaceId),
+    );
     if (!collections) return { error: "no collections for workspace" };
     const content = collections.content.get(filePath);
     const metadata = collections.metadata.get(filePath);
@@ -523,14 +532,14 @@ if (import.meta.env.DEV) {
 export function getOrCreateWorkspaceCollections(
   workspaceId: string,
 ): WorkspaceCollections {
-  let collections = workspaceCollectionsRegistry.get(workspaceId);
+  let collections = workspaceCollectionsRegistry.get(workspaceKey(workspaceId));
 
   if (!collections) {
     collections = {
       metadata: createFileMetadataCollection(workspaceId),
       content: createFileContentCollection(workspaceId),
     };
-    workspaceCollectionsRegistry.set(workspaceId, collections);
+    workspaceCollectionsRegistry.set(workspaceKey(workspaceId), collections);
   }
 
   return collections;
@@ -908,12 +917,15 @@ export async function renameFileOrDirectory(
 }
 
 export function clearWorkspaceCollections(workspaceId: string): void {
-  workspaceCollectionsRegistry.delete(workspaceId);
-  hydratedDirsRegistry.delete(workspaceId);
+  workspaceCollectionsRegistry.delete(workspaceKey(workspaceId));
+  hydratedDirsRegistry.delete(workspaceKey(workspaceId));
   // Drop cached query state too, so a fresh open refetches instead of
-  // replaying a stale error or stale data.
-  queryClient.removeQueries({ queryKey: ["file-metadata", workspaceId] });
-  queryClient.removeQueries({ queryKey: ["file-content", workspaceId] });
+  // replaying a stale error or stale data. Keys were created under the
+  // opener's normalized spelling — normalize here too, or a respelled
+  // close (trailing slash from a hand-typed URL) misses the cache.
+  const native = pathutil.normalize(workspaceId);
+  queryClient.removeQueries({ queryKey: ["file-metadata", native] });
+  queryClient.removeQueries({ queryKey: ["file-content", native] });
 }
 
 /** The workspace's collections as a render-stable pair. */

@@ -21,10 +21,12 @@ import type {
  */
 
 const metadataPayload: MetadataChangeEvent = {
+  watchId: "metadata-/ws",
   changes: [{ type: "created", path: "/ws/new.md", isDirectory: false }],
 };
 
 const contentPayload: ContentChangeEvent = {
+  watchId: "content-/ws",
   changes: [{ path: "/ws/a.md", content: "hi", contentHash: "h" }],
 };
 

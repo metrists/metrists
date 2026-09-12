@@ -12,7 +12,7 @@ import {
   isWorkspaceAccessError,
 } from "@/adapters/platform-adapter.interface";
 import { useWorkspaceParams } from "@/hooks/use-workspace-params";
-import { clearWorkspaceCollections } from "@/entities/files";
+import { closeWorkspace, reloadWorkspaceFiles } from "@/entities/workspaces";
 import { queryClient } from "@/entities/query-client";
 import { isWeb } from "@/utils/platform";
 import { captureError } from "@/telemetry/telemetry";
@@ -162,8 +162,10 @@ function WorkspaceAccessError({
     toast.error(content.title);
   }, [content.title]);
 
+  // Drop and re-seed the file state; agents and the watcher stay up (the
+  // lost fs handle is the webview's, not the harness processes').
   const resume = (path: string) => {
-    clearWorkspaceCollections(path);
+    reloadWorkspaceFiles(path);
     onResolved();
   };
 
@@ -173,6 +175,10 @@ function WorkspaceAccessError({
       .catch(() => null);
     if (!picked) return;
     if (picked !== workspacePath) {
+      // The broken workspace is being abandoned for another one — close it
+      // fully (agents demote to "restored"; its dead handle stops being
+      // watched) rather than leaving a wounded background entry.
+      if (workspacePath) void closeWorkspace(workspacePath);
       navigate(`/${encodeURIComponent(picked)}`);
     }
     resume(picked);
@@ -199,9 +205,7 @@ function WorkspaceAccessError({
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-md bg-muted">
           <FolderLock className="h-6 w-6 text-primary" />
         </div>
-        <h2 className="text-lg font-medium text-foreground">
-          {content.title}
-        </h2>
+        <h2 className="text-lg font-medium text-foreground">{content.title}</h2>
         <p className="mt-2 text-sm text-muted-foreground">{content.body}</p>
         <div className="mt-6 flex flex-col gap-2">
           <Button onClick={handleRecover}>{content.actionLabel}</Button>
@@ -224,7 +228,9 @@ function WorkspaceAccessError({
             <button
               className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
               onClick={() =>
-                platformAdapter.ui.openExternal(CHROME_SITE_PERMISSIONS_HELP_URL)
+                platformAdapter.ui.openExternal(
+                  CHROME_SITE_PERMISSIONS_HELP_URL,
+                )
               }
             >
               {t("fsSitePermissionsHelp")}

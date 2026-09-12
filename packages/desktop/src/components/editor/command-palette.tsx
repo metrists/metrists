@@ -46,6 +46,7 @@ import { useTranslation } from "react-i18next";
 import { pickDirectory } from "../../utils/fs";
 import { getLocalizedCommandKeywords } from "@/utils/command-keywords";
 import { useFileSearch, type FileSearchResult } from "@/hooks/use-file-search";
+import { closeWorkspace } from "@/entities/workspaces";
 import { canOpenFile } from "./polymorphic-editor";
 import { FileTypeIcon } from "./file-type-icon";
 import { useWorkspaceTabsOptional } from "@/components/workspace-tabs-provider";
@@ -282,6 +283,11 @@ export function CommandPalette({
       keywordKey: "commandKeywords.closeWorkspace",
       icon: Home,
       action: () => {
+        // Really close (MET-177): navigating alone only backgrounds the
+        // workspace now that the route unmount no longer tears it down.
+        // Matches the pre-registry behavior of leaving via this command,
+        // which disposed the workspace's agents on unmount.
+        void closeWorkspace(workspacePath);
         navigate("/welcome");
       },
     },

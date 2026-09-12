@@ -12,7 +12,7 @@ import {
   BUILT_IN_HARNESSES,
   buildHarnessResumeCommand,
 } from "@notefig/shared/agent";
-import { path as pathutil } from "@/utils/path";
+import { path as pathutil, workspaceKey } from "@/utils/path";
 import { getDesktopOs } from "@/utils/platform";
 import { formatTimeAgo } from "@/utils/format";
 import i18n from "@/utils/intl";
@@ -255,6 +255,25 @@ export function useSessionActions(task: AgentTaskRow): AgentSessionActions {
               : null,
           },
   };
+}
+
+/**
+ * Running/starting task counts per workspaceKey — the workspace switcher's
+ * activity badge and its close confirmation read this.
+ */
+export function useRunningTaskCounts(): Map<string, number> {
+  const { data: tasks = [] } = useLiveQuery((q) =>
+    q.from({ task: agentTasksCollection }),
+  );
+  return useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of tasks) {
+      if (task.status !== "running" && task.status !== "starting") continue;
+      const key = workspaceKey(task.workspacePath);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [tasks]);
 }
 
 /**
