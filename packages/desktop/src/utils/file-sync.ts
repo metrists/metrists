@@ -358,17 +358,77 @@ export async function handleContentFileSystemChange(
   invalidateDerivedState(workspaceId);
 }
 
+export interface WorkspaceMetadataWatcher {
+  stop: () => void;
+  /** Re-arms the OS watch if the last start attempt failed (the workspace
+   *  was unreadable at open; access restored later). No-op otherwise. */
+  ensureStarted: () => void;
+}
+
 /**
- * File-system watcher lifecycle for a workspace: watches the whole tree for
- * metadata changes and the open files for content changes, routing events
- * into the change handlers above. Re-arms when the open-file set changes.
+ * Workspace-lifetime metadata watching, owned by the workspaces entity
+ * (MET-177): runs from open to explicit close, so a backgrounded workspace
+ * keeps ingesting external changes. Content watching stays render-driven
+ * (`useContentWatchers`) — a backgrounded workspace has no rendered tabs.
  */
-export function useFileWatchers(
+export function startWorkspaceMetadataWatcher(
+  workspacePath: string,
+): WorkspaceMetadataWatcher {
+  const metadataWatchId = `metadata-${workspacePath}`;
+  let isActive = true;
+  let startFailed = false;
+
+  const eventCleanup = platformAdapter.fs.onFsEvent((event) => {
+    if (!isActive) return;
+    // Route by watch id, not by event kind: with several workspaces open,
+    // every listener sees every event, and this recursive watch's pipeline
+    // emits BOTH kinds — an external modify of a file that is not open in
+    // a tab arrives as a content change only, and still has to drive the
+    // git/search/project-settings invalidation in the content handler.
+    if (event.payload.watchId !== metadataWatchId) return;
+    if (event.type === "fs-metadata-changed") {
+      handleMetadataFileSystemChange(event.payload, workspacePath);
+    } else {
+      handleContentFileSystemChange(event.payload, workspacePath);
+    }
+  });
+  const arm = () => {
+    startFailed = false;
+    platformAdapter.fs
+      .startWatchingMetadata([workspacePath], metadataWatchId, {
+        ignore: IGNORE_RULES,
+      })
+      .catch((error) => {
+        startFailed = true;
+        console.error("Failed to start metadata watcher:", error);
+      });
+  };
+  arm();
+
+  return {
+    stop: () => {
+      isActive = false;
+      eventCleanup();
+      void platformAdapter.fs.stopWatching(metadataWatchId).catch(() => {
+        // Already stopped (or never started, if startup failed) — fine.
+      });
+    },
+    ensureStarted: () => {
+      if (isActive && startFailed) arm();
+    },
+  };
+}
+
+/**
+ * Content watching for the focused workspace's open files, re-armed when
+ * the open-file set changes. Metadata watching is not here — it belongs to
+ * the workspace registry for the whole open lifetime.
+ */
+export function useContentWatchers(
   workspacePath: string,
   openFilePaths: string[],
 ): void {
   useEffect(() => {
-    const metadataWatchId = `metadata-${workspacePath}`;
     const contentWatchId = `content-${workspacePath}`;
     let eventCleanup: (() => void) | undefined;
     let isActive = true;
@@ -377,18 +437,16 @@ export function useFileWatchers(
       try {
         eventCleanup = platformAdapter.fs.onFsEvent((event) => {
           if (!isActive) return;
-          if (event.type === "fs-metadata-changed") {
-            handleMetadataFileSystemChange(event.payload, workspacePath);
-          } else {
+          // Same watch-id routing as the metadata side: this watch's
+          // pipeline also emits both kinds (a delete/rename of an open
+          // file surfaces as a metadata change).
+          if (event.payload.watchId !== contentWatchId) return;
+          if (event.type === "fs-content-changed") {
             handleContentFileSystemChange(event.payload, workspacePath);
+          } else {
+            handleMetadataFileSystemChange(event.payload, workspacePath);
           }
         });
-
-        await platformAdapter.fs.startWatchingMetadata(
-          [workspacePath],
-          metadataWatchId,
-          { ignore: IGNORE_RULES },
-        );
 
         if (openFilePaths.length > 0) {
           await platformAdapter.fs.startWatchingContent(
@@ -406,10 +464,9 @@ export function useFileWatchers(
     return () => {
       isActive = false;
       eventCleanup?.();
-      platformAdapter.fs.stopWatching(metadataWatchId);
-      if (openFilePaths.length > 0) {
-        platformAdapter.fs.stopWatching(contentWatchId);
-      }
+      // Unconditional stop: cheaper to swallow the "no watcher" rejection
+      // than to keep the stop condition mirroring the start condition.
+      void platformAdapter.fs.stopWatching(contentWatchId).catch(() => {});
     };
     // Join: re-arm only when the actual set of open paths changes, not on
     // every render's fresh array identity.

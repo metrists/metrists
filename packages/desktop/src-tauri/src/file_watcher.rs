@@ -24,7 +24,11 @@ pub struct MetadataChange {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct MetadataChangeEvent {
+    /// The watch that produced this event — the frontend routes by it, so
+    /// one workspace's events never reach another's handlers (MET-177).
+    pub watch_id: String,
     pub changes: Vec<MetadataChange>,
 }
 
@@ -37,7 +41,10 @@ pub struct ContentChange {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct ContentChangeEvent {
+    /// See MetadataChangeEvent::watch_id.
+    pub watch_id: String,
     pub changes: Vec<ContentChange>,
 }
 
@@ -54,38 +61,66 @@ struct WatcherState {
 
 type WatcherMap = Arc<Mutex<HashMap<String, WatcherState>>>;
 
-/// App-side ignore rules for a metadata watch, keyed by watch_id. Roots are
-/// the watched workspace paths: directory-name checks apply only to
-/// components *inside* a root, so a workspace living under e.g.
-/// ~/Documents/build/ is not swallowed by its own prefix.
+/// Per-watch config, keyed by watch_id: the roots the watch was armed for
+/// (the event pipeline scopes every emitted change to them — MET-177) plus
+/// the app-side ignore rules (metadata watches only; content watches carry
+/// empty lists). Roots are the watched workspace paths: directory-name
+/// checks apply only to components *inside* a root, so a workspace living
+/// under e.g. ~/Documents/build/ is not swallowed by its own prefix.
 #[derive(Clone, Default)]
-struct WatchIgnoreConfig {
+struct WatchConfig {
+    /// Both the raw registered spelling and its canonicalized form: macOS
+    /// FSEvents delivers symlink-resolved paths (/tmp → /private/tmp), so
+    /// matching only the raw root would silently drop every event for a
+    /// workspace under a symlinked prefix.
     roots: Vec<PathBuf>,
     directories: Vec<String>,
     extensions: Vec<String>,
 }
 
+/// Raw + canonicalized spellings of each path, deduped.
+fn root_spellings(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    for path in paths {
+        if !roots.contains(path) {
+            roots.push(path.clone());
+        }
+        if let Ok(canonical) = std::fs::canonicalize(path) {
+            if !roots.contains(&canonical) {
+                roots.push(canonical);
+            }
+        }
+    }
+    roots
+}
+
 lazy_static::lazy_static! {
     static ref WATCHERS: WatcherMap = Arc::new(Mutex::new(HashMap::new()));
     static ref APP_WRITES: Arc<Mutex<Vec<AppWrite>>> = Arc::new(Mutex::new(Vec::new()));
-    static ref WATCH_IGNORES: Arc<Mutex<HashMap<String, WatchIgnoreConfig>>> =
+    static ref WATCH_CONFIGS: Arc<Mutex<HashMap<String, WatchConfig>>> =
         Arc::new(Mutex::new(HashMap::new()));
 }
 
-/// Whether any registered watch's ignore config filters this path.
-/// Lists arrive lowercased from the frontend (utils/ignore.ts).
-fn is_ignored_by_watch_config(path: &Path) -> bool {
-    let configs = WATCH_IGNORES.lock().unwrap();
-    for config in configs.values() {
+/// Component-wise containment (strip_prefix never matches sibling
+/// prefixes: /ws-backup is not under /ws). A content watch's "roots" are
+/// its watched files, which strip_prefix also matches exactly.
+fn is_under_roots(path: &Path, roots: &[PathBuf]) -> bool {
+    roots.iter().any(|root| path.strip_prefix(root).is_ok())
+}
+
+/// Whether THIS watch's ignore config filters this path — scoped per
+/// watch, so one workspace's rules never swallow another's paths
+/// (MET-177). Content watches register no config and get no config-based
+/// filtering. Lists arrive lowercased from the frontend (utils/ignore.ts).
+fn is_ignored_by_watch_config(path: &Path, watch_id: &str) -> bool {
+    let configs = WATCH_CONFIGS.lock().unwrap();
+    if let Some(config) = configs.get(watch_id) {
         for root in &config.roots {
             if let Ok(relative) = path.strip_prefix(root) {
                 let ignored_component = relative.components().any(|component| {
                     if let std::path::Component::Normal(os_str) = component {
                         if let Some(name) = os_str.to_str() {
-                            return config
-                                .directories
-                                .iter()
-                                .any(|d| *d == name.to_lowercase());
+                            return config.directories.iter().any(|d| *d == name.to_lowercase());
                         }
                     }
                     false
@@ -137,7 +172,7 @@ fn is_recent_app_write(path: &Path, content_hash: &str) -> bool {
 /// `is_hidden_path` exempts the app dir (walkdir_utils::APP_DIR_NAME) and
 /// its scratchpads folder, so scratchpad events flow while every other
 /// app-internal path (`.notefig/.git`, …) stays filtered.
-fn should_filter_path(path: &Path) -> bool {
+fn should_filter_path(path: &Path, watch_id: &str) -> bool {
     if is_hidden_path(path) {
         return true;
     }
@@ -149,7 +184,7 @@ fn should_filter_path(path: &Path) -> bool {
         }
     }
 
-    is_ignored_by_watch_config(path)
+    is_ignored_by_watch_config(path, watch_id)
 }
 
 /// Compute content hash using MD5 (simple and deterministic)
@@ -161,6 +196,7 @@ pub fn compute_content_hash(content: &str) -> String {
 /// Collect all file paths in a directory recursively
 fn collect_directory_paths(
     dir_path: PathBuf,
+    watch_id: String,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Vec<(PathBuf, bool)>> + Send>> {
     Box::pin(async move {
         let mut results = Vec::new();
@@ -169,7 +205,7 @@ fn collect_directory_paths(
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let path = entry.path();
 
-                if should_filter_path(&path) {
+                if should_filter_path(&path, &watch_id) {
                     continue;
                 }
 
@@ -177,7 +213,7 @@ fn collect_directory_paths(
                 results.push((path.clone(), is_directory));
 
                 if is_directory {
-                    let sub_results = collect_directory_paths(path).await;
+                    let sub_results = collect_directory_paths(path, watch_id.clone()).await;
                     results.extend(sub_results);
                 }
             }
@@ -189,7 +225,12 @@ fn collect_directory_paths(
 
 /// Emit "created" for a path — and, when it is a directory, for everything
 /// inside it (a moved-in tree only produces one event for its root).
-async fn push_created(metadata_changes: &mut Vec<MetadataChange>, path: PathBuf, is_dir: bool) {
+async fn push_created(
+    metadata_changes: &mut Vec<MetadataChange>,
+    path: PathBuf,
+    is_dir: bool,
+    watch_id: &str,
+) {
     metadata_changes.push(MetadataChange {
         change_type: "created".to_string(),
         path: path.to_string_lossy().to_string(),
@@ -197,7 +238,8 @@ async fn push_created(metadata_changes: &mut Vec<MetadataChange>, path: PathBuf,
         is_directory: is_dir,
     });
     if is_dir {
-        for (child_path, child_is_dir) in collect_directory_paths(path).await {
+        for (child_path, child_is_dir) in collect_directory_paths(path, watch_id.to_string()).await
+        {
             metadata_changes.push(MetadataChange {
                 change_type: "created".to_string(),
                 path: child_path.to_string_lossy().to_string(),
@@ -274,7 +316,21 @@ async fn push_removed_or_modified(
 }
 
 /// Process file system events and emit to frontend
-async fn process_events<R: tauri::Runtime>(events: Vec<Event>, app_handle: &AppHandle<R>) {
+async fn process_events<R: tauri::Runtime>(
+    events: Vec<Event>,
+    app_handle: &AppHandle<R>,
+    watch_id: &str,
+) {
+    // Unknown id means the watch was stopped while these events were in
+    // flight — nothing wants them.
+    let Some(roots) = WATCH_CONFIGS
+        .lock()
+        .unwrap()
+        .get(watch_id)
+        .map(|config| config.roots.clone())
+    else {
+        return;
+    };
     let mut metadata_changes = Vec::new();
     let mut content_changes = Vec::new();
 
@@ -282,18 +338,18 @@ async fn process_events<R: tauri::Runtime>(events: Vec<Event>, app_handle: &AppH
         match event.kind {
             EventKind::Create(CreateKind::File) => {
                 for path in event.paths {
-                    if should_filter_path(&path) {
+                    if should_filter_path(&path, watch_id) || !is_under_roots(&path, &roots) {
                         continue;
                     }
-                    push_created(&mut metadata_changes, path, false).await;
+                    push_created(&mut metadata_changes, path, false, watch_id).await;
                 }
             }
             EventKind::Create(CreateKind::Folder) => {
                 for path in event.paths {
-                    if should_filter_path(&path) {
+                    if should_filter_path(&path, watch_id) || !is_under_roots(&path, &roots) {
                         continue;
                     }
-                    push_created(&mut metadata_changes, path, true).await;
+                    push_created(&mut metadata_changes, path, true, watch_id).await;
                 }
             }
             // Windows: the ReadDirectoryChangesW backend only ever emits
@@ -302,30 +358,40 @@ async fn process_events<R: tauri::Runtime>(events: Vec<Event>, app_handle: &AppH
             // stale (MET-157 B6). The kind is unknown, so probe the fs.
             EventKind::Create(CreateKind::Any | CreateKind::Other) => {
                 for path in event.paths {
-                    if should_filter_path(&path) {
+                    if should_filter_path(&path, watch_id) || !is_under_roots(&path, &roots) {
                         continue;
                     }
                     let is_dir = path.is_dir();
-                    push_created(&mut metadata_changes, path, is_dir).await;
+                    push_created(&mut metadata_changes, path, is_dir, watch_id).await;
                 }
             }
 
             EventKind::Remove(RemoveKind::File) => {
                 for path in event.paths {
-                    if should_filter_path(&path) {
+                    if should_filter_path(&path, watch_id) || !is_under_roots(&path, &roots) {
                         continue;
                     }
-                    push_removed_or_modified(&mut metadata_changes, &mut content_changes, path, false)
-                        .await;
+                    push_removed_or_modified(
+                        &mut metadata_changes,
+                        &mut content_changes,
+                        path,
+                        false,
+                    )
+                    .await;
                 }
             }
             EventKind::Remove(RemoveKind::Folder) => {
                 for path in event.paths {
-                    if should_filter_path(&path) {
+                    if should_filter_path(&path, watch_id) || !is_under_roots(&path, &roots) {
                         continue;
                     }
-                    push_removed_or_modified(&mut metadata_changes, &mut content_changes, path, true)
-                        .await;
+                    push_removed_or_modified(
+                        &mut metadata_changes,
+                        &mut content_changes,
+                        path,
+                        true,
+                    )
+                    .await;
                 }
             }
             // Windows counterpart of Create(Any) above: only RemoveKind::Any
@@ -333,11 +399,16 @@ async fn process_events<R: tauri::Runtime>(events: Vec<Event>, app_handle: &AppH
             // path routes through the content-change branch (files only).
             EventKind::Remove(RemoveKind::Any | RemoveKind::Other) => {
                 for path in event.paths {
-                    if should_filter_path(&path) {
+                    if should_filter_path(&path, watch_id) || !is_under_roots(&path, &roots) {
                         continue;
                     }
-                    push_removed_or_modified(&mut metadata_changes, &mut content_changes, path, false)
-                        .await;
+                    push_removed_or_modified(
+                        &mut metadata_changes,
+                        &mut content_changes,
+                        path,
+                        false,
+                    )
+                    .await;
                 }
             }
 
@@ -347,7 +418,7 @@ async fn process_events<R: tauri::Runtime>(events: Vec<Event>, app_handle: &AppH
             | EventKind::Modify(ModifyKind::Any)
             | EventKind::Modify(ModifyKind::Other) => {
                 for path in event.paths {
-                    if should_filter_path(&path) {
+                    if should_filter_path(&path, watch_id) || !is_under_roots(&path, &roots) {
                         continue;
                     }
 
@@ -361,7 +432,7 @@ async fn process_events<R: tauri::Runtime>(events: Vec<Event>, app_handle: &AppH
             // which emit Name(Any) with a single path when the temp file is renamed to the target
             EventKind::Modify(ModifyKind::Name(RenameMode::Any)) => {
                 for path in event.paths {
-                    if should_filter_path(&path) {
+                    if should_filter_path(&path, watch_id) || !is_under_roots(&path, &roots) {
                         continue;
                     }
 
@@ -376,14 +447,46 @@ async fn process_events<R: tauri::Runtime>(events: Vec<Event>, app_handle: &AppH
                     let old_path = &event.paths[0];
                     let new_path = &event.paths[1];
 
-                    if should_filter_path(old_path) || should_filter_path(new_path) {
+                    // A filtered source is not tracked state leaving the
+                    // tree — most commonly an atomic-save temp file renamed
+                    // over its target (the content arms carry that save).
+                    if should_filter_path(old_path, watch_id) {
+                        continue;
+                    }
+
+                    // Scope the rename to this watch's roots and filters,
+                    // judged per endpoint: a destination that leaves the
+                    // tree — or lands somewhere hidden/ignored (Finder
+                    // trash, .git/, an ignored dist/) — is, from this
+                    // watch's perspective, a delete of the source; a source
+                    // arriving from outside is a create; fully outside is
+                    // not this watch's business.
+                    let old_in = is_under_roots(old_path, &roots);
+                    let new_in = is_under_roots(new_path, &roots);
+                    if !old_in && !new_in {
+                        continue;
+                    }
+                    let new_ok = new_in && !should_filter_path(new_path, watch_id);
+                    if old_in && !new_ok {
+                        push_deleted(&mut metadata_changes, old_path.clone(), new_path.is_dir());
+                        continue;
+                    }
+                    if !old_in {
+                        push_created(
+                            &mut metadata_changes,
+                            new_path.clone(),
+                            new_path.is_dir(),
+                            watch_id,
+                        )
+                        .await;
                         continue;
                     }
 
                     let is_directory = new_path.is_dir();
 
                     if is_directory {
-                        let dir_contents = collect_directory_paths(new_path.clone()).await;
+                        let dir_contents =
+                            collect_directory_paths(new_path.clone(), watch_id.to_string()).await;
 
                         metadata_changes.push(MetadataChange {
                             change_type: "renamed".to_string(),
@@ -429,20 +532,25 @@ async fn process_events<R: tauri::Runtime>(events: Vec<Event>, app_handle: &AppH
             // frontend already treats an unknown-oldPath rename as a create.
             EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
                 for path in event.paths {
-                    if should_filter_path(&path) {
+                    if should_filter_path(&path, watch_id) || !is_under_roots(&path, &roots) {
                         continue;
                     }
-                    push_removed_or_modified(&mut metadata_changes, &mut content_changes, path, false)
-                        .await;
+                    push_removed_or_modified(
+                        &mut metadata_changes,
+                        &mut content_changes,
+                        path,
+                        false,
+                    )
+                    .await;
                 }
             }
             EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
                 for path in event.paths {
-                    if should_filter_path(&path) {
+                    if should_filter_path(&path, watch_id) || !is_under_roots(&path, &roots) {
                         continue;
                     }
                     let is_dir = path.is_dir();
-                    push_created(&mut metadata_changes, path, is_dir).await;
+                    push_created(&mut metadata_changes, path, is_dir, watch_id).await;
                 }
             }
 
@@ -452,6 +560,7 @@ async fn process_events<R: tauri::Runtime>(events: Vec<Event>, app_handle: &AppH
 
     if !metadata_changes.is_empty() {
         let event = MetadataChangeEvent {
+            watch_id: watch_id.to_string(),
             changes: metadata_changes,
         };
         let _ = app_handle.emit("fs-metadata-changed", event);
@@ -459,6 +568,7 @@ async fn process_events<R: tauri::Runtime>(events: Vec<Event>, app_handle: &AppH
 
     if !content_changes.is_empty() {
         let event = ContentChangeEvent {
+            watch_id: watch_id.to_string(),
             changes: content_changes,
         };
         let _ = app_handle.emit("fs-content-changed", event);
@@ -476,19 +586,21 @@ pub async fn start_watching_metadata<R: tauri::Runtime>(
     app_handle: AppHandle<R>,
 ) -> Result<(), String> {
     let app_handle_clone = app_handle.clone();
+    let watch_id_for_events = watch_id.clone();
 
     let mut debouncer = new_debouncer(
         Duration::from_millis(100),
         None,
         move |result: DebounceEventResult| {
             let app_handle = app_handle_clone.clone();
+            let watch_id = watch_id_for_events.clone();
 
             match result {
                 Ok(events) => {
                     tauri::async_runtime::spawn(async move {
                         let notify_events: Vec<Event> =
                             events.into_iter().map(|e| e.event).collect();
-                        process_events(notify_events, &app_handle).await;
+                        process_events(notify_events, &app_handle, &watch_id).await;
                     });
                 }
                 Err(errors) => {
@@ -508,17 +620,14 @@ pub async fn start_watching_metadata<R: tauri::Runtime>(
             .map_err(|e| format!("Failed to watch path {}: {}", path.display(), e))?;
     }
 
-    {
-        let mut ignores = WATCH_IGNORES.lock().unwrap();
-        ignores.insert(
-            watch_id.clone(),
-            WatchIgnoreConfig {
-                roots: path_bufs.clone(),
-                directories: ignore_directories.unwrap_or_default(),
-                extensions: ignore_extensions.unwrap_or_default(),
-            },
-        );
-    }
+    WATCH_CONFIGS.lock().unwrap().insert(
+        watch_id.clone(),
+        WatchConfig {
+            roots: root_spellings(&path_bufs),
+            directories: ignore_directories.unwrap_or_default(),
+            extensions: ignore_extensions.unwrap_or_default(),
+        },
+    );
 
     let mut watchers = WATCHERS.lock().unwrap();
     watchers.insert(
@@ -565,22 +674,31 @@ pub async fn start_watching_content<R: tauri::Runtime>(
             }
         }
 
-        state.watched_paths = new_paths;
+        state.watched_paths = new_paths.clone();
+        WATCH_CONFIGS.lock().unwrap().insert(
+            watch_id,
+            WatchConfig {
+                roots: root_spellings(&new_paths),
+                ..Default::default()
+            },
+        );
     } else {
         let app_handle_clone = app_handle.clone();
+        let watch_id_for_events = watch_id.clone();
 
         let mut debouncer = new_debouncer(
             Duration::from_millis(100),
             None,
             move |result: DebounceEventResult| {
                 let app_handle = app_handle_clone.clone();
+                let watch_id = watch_id_for_events.clone();
 
                 match result {
                     Ok(events) => {
                         tauri::async_runtime::spawn(async move {
                             let notify_events: Vec<Event> =
                                 events.into_iter().map(|e| e.event).collect();
-                            process_events(notify_events, &app_handle).await;
+                            process_events(notify_events, &app_handle, &watch_id).await;
                         });
                     }
                     Err(errors) => {
@@ -598,6 +716,13 @@ pub async fn start_watching_content<R: tauri::Runtime>(
                 .map_err(|e| format!("Failed to watch path {}: {}", path.display(), e))?;
         }
 
+        WATCH_CONFIGS.lock().unwrap().insert(
+            watch_id.clone(),
+            WatchConfig {
+                roots: root_spellings(&new_paths),
+                ..Default::default()
+            },
+        );
         watchers.insert(
             watch_id,
             WatcherState {
@@ -613,7 +738,7 @@ pub async fn start_watching_content<R: tauri::Runtime>(
 /// Stop watching (works for both metadata and content watchers)
 #[tauri::command]
 pub async fn stop_watching(watch_id: String) -> Result<(), String> {
-    WATCH_IGNORES.lock().unwrap().remove(&watch_id);
+    WATCH_CONFIGS.lock().unwrap().remove(&watch_id);
     let mut watchers = WATCHERS.lock().unwrap();
 
     if watchers.remove(&watch_id).is_some() {
@@ -635,26 +760,84 @@ mod event_kind_tests {
     use tauri::test::{mock_builder, mock_context, noop_assets};
     use tauri::Listener;
 
-    /// Runs `process_events` on a mock app and returns the captured
-    /// fs-metadata-changed payloads' (type, path, is_directory) rows.
-    fn metadata_changes_for(events: Vec<Event>) -> Vec<(String, String, bool)> {
+    static TEST_WATCH_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    /// A unique id per call so parallel tests never race the global
+    /// WATCH_CONFIGS entries they register.
+    fn unique_watch_id(prefix: &str) -> String {
+        let n = TEST_WATCH_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        format!("{prefix}-{n}")
+    }
+
+    /// Registers a config for the watch id for the duration of one
+    /// process_events run (the pipeline drops everything for an unknown id).
+    fn with_watch_config<T>(watch_id: &str, config: WatchConfig, run: impl FnOnce() -> T) -> T {
+        WATCH_CONFIGS
+            .lock()
+            .unwrap()
+            .insert(watch_id.to_string(), config);
+        let out = run();
+        WATCH_CONFIGS.lock().unwrap().remove(watch_id);
+        out
+    }
+
+    /// Runs `process_events` on a mock app under the given watch id and
+    /// roots, returning the captured fs-metadata-changed payloads' (type,
+    /// path, is_directory) rows and asserting every payload carries the id.
+    fn metadata_changes_for_watch(
+        events: Vec<Event>,
+        watch_id: &str,
+        roots: Vec<PathBuf>,
+    ) -> Vec<(String, String, bool)> {
+        metadata_changes_for_config(
+            events,
+            watch_id,
+            WatchConfig {
+                roots,
+                ..Default::default()
+            },
+        )
+    }
+
+    fn metadata_changes_for_config(
+        events: Vec<Event>,
+        watch_id: &str,
+        config: WatchConfig,
+    ) -> Vec<(String, String, bool)> {
         let app = mock_builder()
             .build(mock_context(noop_assets()))
             .expect("failed to build mock app");
         let captured: Arc<Mutex<Vec<MetadataChange>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = captured.clone();
+        let expected_id = watch_id.to_string();
         app.listen("fs-metadata-changed", move |event| {
             let parsed: MetadataChangeEvent =
                 serde_json::from_str(event.payload()).expect("payload should deserialize");
+            assert_eq!(
+                parsed.watch_id, expected_id,
+                "payload must carry its watch id"
+            );
             sink.lock().unwrap().extend(parsed.changes);
         });
 
-        tauri::async_runtime::block_on(process_events(events, app.handle()));
+        with_watch_config(watch_id, config, || {
+            tauri::async_runtime::block_on(process_events(events, app.handle(), watch_id));
+        });
 
         let rows = captured.lock().unwrap();
         rows.iter()
             .map(|c| (c.change_type.clone(), c.path.clone(), c.is_directory))
             .collect()
+    }
+
+    /// Generic harness: roots wide open (the platform temp dir holds every
+    /// path these tests synthesize), scoping-specific tests pass real roots.
+    fn metadata_changes_for(events: Vec<Event>) -> Vec<(String, String, bool)> {
+        metadata_changes_for_watch(
+            events,
+            &unique_watch_id("metadata-test"),
+            vec![std::env::temp_dir()],
+        )
     }
 
     fn event(kind: EventKind, paths: Vec<PathBuf>) -> Event {
@@ -665,7 +848,10 @@ mod event_kind_tests {
 
     #[test]
     fn create_any_probes_file_vs_directory() {
-        let dir = tempfile::Builder::new().prefix("notefig-b6").tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-b6")
+            .tempdir()
+            .unwrap();
         let file = dir.path().join("note.md");
         std::fs::write(&file, "x").unwrap();
         let subdir = dir.path().join("sub");
@@ -705,7 +891,10 @@ mod event_kind_tests {
 
     #[test]
     fn unpaired_rename_from_and_to_become_delete_and_create() {
-        let dir = tempfile::Builder::new().prefix("notefig-b6").tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-b6")
+            .tempdir()
+            .unwrap();
         let target = dir.path().join("renamed.md");
         std::fs::write(&target, "x").unwrap();
         let source = dir.path().join("original.md"); // already gone
@@ -735,21 +924,23 @@ mod event_kind_tests {
 
     #[test]
     fn typed_create_and_remove_kinds_still_map() {
-        let dir = tempfile::Builder::new().prefix("notefig-b6").tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-b6")
+            .tempdir()
+            .unwrap();
         let file = dir.path().join("typed.md");
         std::fs::write(&file, "x").unwrap();
         let gone_dir = dir.path().join("typed-subdir"); // never created
 
         let changes = metadata_changes_for(vec![
             event(EventKind::Create(CreateKind::File), vec![file.clone()]),
-            event(EventKind::Remove(RemoveKind::Folder), vec![gone_dir.clone()]),
+            event(
+                EventKind::Remove(RemoveKind::Folder),
+                vec![gone_dir.clone()],
+            ),
         ]);
 
-        assert!(changes.contains(&(
-            "created".into(),
-            file.to_string_lossy().to_string(),
-            false
-        )));
+        assert!(changes.contains(&("created".into(), file.to_string_lossy().to_string(), false)));
         assert!(changes.contains(&(
             "deleted".into(),
             gone_dir.to_string_lossy().to_string(),
@@ -763,13 +954,21 @@ mod event_kind_tests {
     #[test]
     fn app_dir_events_pass_filter_hidden_children_stay_filtered() {
         let app_dir = PathBuf::from("/ws/.notefig");
-        assert!(!should_filter_path(&app_dir.join("scratchpads/untitled.md")));
-        assert!(should_filter_path(&app_dir.join(".git/HEAD")));
-        assert!(should_filter_path(&app_dir.join("agent/opencode-1.json")));
-        assert!(should_filter_path(&app_dir.join("tasks.json")));
-        assert!(should_filter_path(Path::new("/ws/.git/HEAD")));
+        let id = "metadata-/ws";
+        assert!(!should_filter_path(
+            &app_dir.join("scratchpads/untitled.md"),
+            id
+        ));
+        assert!(should_filter_path(&app_dir.join(".git/HEAD"), id));
         assert!(should_filter_path(
-            &app_dir.join("scratchpads/untitled.md.tmp")
+            &app_dir.join("agent/opencode-1.json"),
+            id
+        ));
+        assert!(should_filter_path(&app_dir.join("tasks.json"), id));
+        assert!(should_filter_path(Path::new("/ws/.git/HEAD"), id));
+        assert!(should_filter_path(
+            &app_dir.join("scratchpads/untitled.md.tmp"),
+            id
         ));
     }
 
@@ -779,7 +978,10 @@ mod event_kind_tests {
     /// deleted the row and closed the tab on virtually every keystroke.
     #[test]
     fn remove_of_a_path_that_still_exists_is_not_a_delete() {
-        let dir = tempfile::Builder::new().prefix("notefig-b6").tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-b6")
+            .tempdir()
+            .unwrap();
         let file = dir.path().join("still-here.md");
         std::fs::write(&file, "new content after replace").unwrap();
 
@@ -798,7 +1000,10 @@ mod event_kind_tests {
     /// content update rather than silently dropped.
     #[test]
     fn remove_of_a_path_that_still_exists_emits_a_content_change() {
-        let dir = tempfile::Builder::new().prefix("notefig-b6").tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-b6")
+            .tempdir()
+            .unwrap();
         let file = dir.path().join("replaced.md");
         std::fs::write(&file, "the new content").unwrap();
 
@@ -813,10 +1018,21 @@ mod event_kind_tests {
             sink.lock().unwrap().extend(parsed.changes);
         });
 
-        tauri::async_runtime::block_on(process_events(
-            vec![event(EventKind::Remove(RemoveKind::Any), vec![file.clone()])],
-            app.handle(),
-        ));
+        let id = unique_watch_id("metadata-content-test");
+        let config = WatchConfig {
+            roots: vec![dir.path().to_path_buf()],
+            ..Default::default()
+        };
+        with_watch_config(&id, config, || {
+            tauri::async_runtime::block_on(process_events(
+                vec![event(
+                    EventKind::Remove(RemoveKind::Any),
+                    vec![file.clone()],
+                )],
+                app.handle(),
+                &id,
+            ));
+        });
 
         let rows = captured.lock().unwrap();
         assert_eq!(rows.len(), 1);
@@ -830,7 +1046,10 @@ mod event_kind_tests {
     /// (and children) really is stale and must still be cleaned up.
     #[test]
     fn remove_of_a_path_whose_type_changed_is_still_a_delete() {
-        let dir = tempfile::Builder::new().prefix("notefig-b6").tempdir().unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-b6")
+            .tempdir()
+            .unwrap();
         let path = dir.path().join("was-a-dir-now-a-file");
         std::fs::write(&path, "now a file").unwrap();
 
@@ -844,6 +1063,179 @@ mod event_kind_tests {
         assert_eq!(
             changes,
             vec![("deleted".into(), path.to_string_lossy().to_string(), true)]
+        );
+    }
+
+    /// One workspace's ignore rules must not swallow another watch's paths
+    /// (MET-177): the config is consulted per producing watch only.
+    #[test]
+    fn ignore_rules_are_scoped_to_their_own_watch() {
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-iso")
+            .tempdir()
+            .unwrap();
+        let dist = dir.path().join("dist");
+        std::fs::create_dir(&dist).unwrap();
+        let artifact = dist.join("bundle.md");
+        std::fs::write(&artifact, "x").unwrap();
+
+        // Watch A (some other workspace's watch) ignores dist/ under this
+        // very root; watch B watches the same root with no ignores.
+        let config_a = || WatchConfig {
+            roots: vec![dir.path().to_path_buf()],
+            directories: vec!["dist".to_string()],
+            extensions: vec![],
+        };
+
+        let created = || {
+            vec![event(
+                EventKind::Create(CreateKind::File),
+                vec![artifact.clone()],
+            )]
+        };
+
+        // B's pipeline: A's rules must not apply.
+        let for_b =
+            metadata_changes_for_watch(created(), "metadata-iso-b", vec![dir.path().to_path_buf()]);
+        assert!(
+            for_b
+                .iter()
+                .any(|(t, p, _)| t == "created" && p.ends_with("bundle.md")),
+            "another watch's ignore rules must not swallow this watch's event",
+        );
+
+        // A's own pipeline: its rules do apply.
+        let for_a = metadata_changes_for_config(created(), "metadata-iso-a", config_a());
+        assert!(
+            for_a.is_empty(),
+            "the owning watch's ignore rules still filter"
+        );
+    }
+
+    /// MET-177: the event pipeline scopes every change to its own watch's
+    /// roots — an event for a path outside them (sibling-prefix included)
+    /// never reaches the frontend.
+    #[test]
+    fn events_outside_the_watch_roots_are_dropped() {
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-roots")
+            .tempdir()
+            .unwrap();
+        let root = dir.path().join("ws");
+        std::fs::create_dir(&root).unwrap();
+        let sibling = dir.path().join("ws-backup");
+        std::fs::create_dir(&sibling).unwrap();
+        let stray = sibling.join("stray.md");
+        std::fs::write(&stray, "x").unwrap();
+
+        let changes = metadata_changes_for_watch(
+            vec![event(EventKind::Create(CreateKind::File), vec![stray])],
+            &unique_watch_id("metadata-roots"),
+            vec![root],
+        );
+        assert!(
+            changes.is_empty(),
+            "sibling-prefix path leaked: {changes:?}"
+        );
+    }
+
+    /// A rename whose destination leaves the watched tree is, from this
+    /// watch's perspective, a delete of the source.
+    #[test]
+    fn rename_out_of_the_watch_roots_becomes_a_delete() {
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-roots")
+            .tempdir()
+            .unwrap();
+        let root = dir.path().join("ws");
+        std::fs::create_dir(&root).unwrap();
+        let outside = dir.path().join("elsewhere.md");
+        std::fs::write(&outside, "x").unwrap();
+        let source = root.join("was-here.md");
+
+        let changes = metadata_changes_for_watch(
+            vec![event(
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+                vec![source.clone(), outside],
+            )],
+            &unique_watch_id("metadata-roots"),
+            vec![root],
+        );
+        assert_eq!(
+            changes,
+            vec![(
+                "deleted".into(),
+                source.to_string_lossy().to_string(),
+                false
+            )]
+        );
+    }
+
+    /// A rename whose destination is hidden or ignored (Finder trash,
+    /// .git/, an ignored build dir) is a delete of the source — previously
+    /// the joint filter guard dropped the whole event and the source row
+    /// went stale.
+    #[test]
+    fn rename_into_hidden_space_becomes_a_delete() {
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-roots")
+            .tempdir()
+            .unwrap();
+        let root = dir.path().join("ws");
+        std::fs::create_dir(&root).unwrap();
+        let trash = root.join(".trash");
+        std::fs::create_dir(&trash).unwrap();
+        let target = trash.join("note.md");
+        std::fs::write(&target, "x").unwrap();
+        let source = root.join("note.md");
+
+        let changes = metadata_changes_for_watch(
+            vec![event(
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+                vec![source.clone(), target],
+            )],
+            &unique_watch_id("metadata-roots"),
+            vec![root],
+        );
+        assert_eq!(
+            changes,
+            vec![(
+                "deleted".into(),
+                source.to_string_lossy().to_string(),
+                false
+            )]
+        );
+    }
+
+    /// A rename arriving from outside the watched tree is a create at the
+    /// destination.
+    #[test]
+    fn rename_into_the_watch_roots_becomes_a_create() {
+        let dir = tempfile::Builder::new()
+            .prefix("notefig-roots")
+            .tempdir()
+            .unwrap();
+        let root = dir.path().join("ws");
+        std::fs::create_dir(&root).unwrap();
+        let target = root.join("arrived.md");
+        std::fs::write(&target, "x").unwrap();
+        let source = dir.path().join("elsewhere.md");
+
+        let changes = metadata_changes_for_watch(
+            vec![event(
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+                vec![source, target.clone()],
+            )],
+            &unique_watch_id("metadata-roots"),
+            vec![root],
+        );
+        assert_eq!(
+            changes,
+            vec![(
+                "created".into(),
+                target.to_string_lossy().to_string(),
+                false
+            )]
         );
     }
 }

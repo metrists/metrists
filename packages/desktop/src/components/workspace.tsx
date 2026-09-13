@@ -10,7 +10,7 @@ import { SettingsModal } from "@/components/editor/settings-modal";
 import { CommandPalette } from "@/components/editor/command-palette";
 import { useTranslation } from "react-i18next";
 import { useContentFetching } from "@/entities/files";
-import { useFileWatchers } from "@/utils/file-sync";
+import { useContentWatchers } from "@/utils/file-sync";
 import { useWorkspaceTabs, renameOpenFileTab } from "@/entities/tabs";
 import { DebugPanel } from "./debug-panel";
 import { useWorkspaceParams } from "@/hooks/use-workspace-params";
@@ -25,7 +25,6 @@ import { WorkspaceTabsProvider } from "@/components/workspace-tabs-provider";
 import { PromptWidgetBoundary } from "@/components/agent/prompt-widget-boundary";
 import { useThrowWorkspaceAccessError } from "@/components/workspace-error-boundary";
 import { disposeAllEditors } from "@/components/editor/editor-store";
-import { disposeWorkspaceTaskManager } from "@/agent/agent-service";
 import { agentTabId, tabKind } from "@/entities/tabs";
 import { useTabElements } from "@/tabs/tab-types";
 import { useReleaseNotesOnUpdate } from "@/hooks/use-release-notes-on-update";
@@ -252,7 +251,9 @@ function useDirectionSetting(workspacePath: string) {
 function useStaleTabPruning(
   staleTabIds: string[],
   layout: Parameters<typeof removeTabFromLayout>[0],
-  handleLayoutChange: (layout: Parameters<typeof removeTabFromLayout>[0]) => void,
+  handleLayoutChange: (
+    layout: Parameters<typeof removeTabFromLayout>[0],
+  ) => void,
 ) {
   useEffect(() => {
     if (staleTabIds.length === 0) return;
@@ -278,7 +279,6 @@ function useWordCount(content: string): number | null {
   }, [content]);
 }
 
-
 /** Only file tabs are gated on the editor's format support; the other tab
  *  kinds carry their own content. */
 function canOpenFileInTab(file: { type: string; path: string }): boolean {
@@ -286,9 +286,11 @@ function canOpenFileInTab(file: { type: string; path: string }): boolean {
 }
 
 /** Workspace-scoped lifecycle: access guard, navigation persistence, and
- *  teardown on leaving (editors disposed; agent runtimes torn down — their
- *  rows persist and demote to "restored", the tasks collection is
- *  storage-backed, MET-54). */
+ *  editor disposal on leaving. Agent runtimes deliberately survive
+ *  navigation (MET-177): the workspace stays open in the registry, and its
+ *  TaskManager is only torn down by an explicit close
+ *  (entities/workspaces.ts closeWorkspace — rows demote to "restored" per
+ *  MET-54). */
 function useWorkspaceLifecycle(workspacePath: string): void {
   useThrowWorkspaceAccessError(workspacePath);
   useNavigationPersistence();
@@ -297,11 +299,6 @@ function useWorkspaceLifecycle(workspacePath: string): void {
       disposeAllEditors();
     };
   }, []);
-  useEffect(() => {
-    return () => {
-      void disposeWorkspaceTaskManager(workspacePath);
-    };
-  }, [workspacePath]);
 }
 
 /** Everything derived from the open tabs' backing rows: the cross-entity
@@ -320,7 +317,9 @@ function useWorkspaceDocuments({
   openTabs: string[];
   activeTabId: string | null;
   layout: Parameters<typeof removeTabFromLayout>[0];
-  handleLayoutChange: (layout: Parameters<typeof removeTabFromLayout>[0]) => void;
+  handleLayoutChange: (
+    layout: Parameters<typeof removeTabFromLayout>[0],
+  ) => void;
   closeTab: (tabId: string) => void;
   openFile: (options: OpenFileInLayoutOptions) => void;
 }) {
@@ -349,7 +348,7 @@ function useWorkspaceDocuments({
 
   const isFetchingContent = useContentFetching(workspacePath);
   useStaleTabPruning(staleTabIds, layout, handleLayoutChange);
-  useFileWatchers(workspacePath, fileOpenTabIds);
+  useContentWatchers(workspacePath, fileOpenTabIds);
 
   return { allDockableTabs, wordCount, isSynced: !isFetchingContent };
 }

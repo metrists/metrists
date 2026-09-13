@@ -190,6 +190,7 @@ async function externalArrival(contentText: string) {
   fake.store.set(FILE, { content: contentText, modifiedAt: new Date() });
   await handleContentFileSystemChange(
     {
+      watchId: "test-watch",
       changes: [
         {
           path: FILE,

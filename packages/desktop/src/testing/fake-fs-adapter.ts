@@ -205,6 +205,7 @@ export function installWatcherSim(options: {
         }
         await new Promise((r) => setTimeout(r, eventDelay()));
         await onExternalChange({
+          watchId: "fake-external-content",
           changes: [{ path, content, contentHash: hash }],
         });
       })(),

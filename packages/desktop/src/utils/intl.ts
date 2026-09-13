@@ -75,6 +75,14 @@ i18n
           sort: "Sort",
           sortFiles: "Sort files",
           switchWorkspace: "Switch workspace",
+          openWorkspacesSection: "Open",
+          closeWorkspaceAction: "Close workspace",
+          closeWorkspaceTitle: "Close workspace?",
+          closeWorkspaceBody_one:
+            "\u201C{{name}}\u201D has {{count}} running agent task. Closing interrupts it \u2014 the session becomes restorable and can be revived when you reopen the workspace.",
+          closeWorkspaceBody_other:
+            "\u201C{{name}}\u201D has {{count}} running agent tasks. Closing interrupts them \u2014 the sessions become restorable and can be revived when you reopen the workspace.",
+          closeWorkspaceConfirm: "Close workspace",
           sortNameAsc: "Name (A \u2192 Z)",
           sortNameDesc: "Name (Z \u2192 A)",
           sortDateModified: "Date modified",
@@ -410,7 +418,7 @@ i18n
           editLink: "Edit link",
           removeLink: "Remove link",
           linkFileNotFound: "File not found: {{href}}",
-          linkCannotOpenInEditor: "\"{{href}}\" can't be opened in the editor",
+          linkCannotOpenInEditor: '"{{href}}" can\'t be opened in the editor',
 
           // Editor table bubble menu
           insertRowAfter: "Insert row after",

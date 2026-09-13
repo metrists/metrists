@@ -193,7 +193,7 @@ export class BrowserFileWatcher {
         console.log(`[BrowserFileWatcher] Metadata changes detected:`, changes);
         state.snapshot = newSnapshot;
 
-        const event: MetadataChangeEvent = { changes };
+        const event: MetadataChangeEvent = { watchId, changes };
         this.emit({ type: "fs-metadata-changed", payload: event });
       }
     } catch (error) {
@@ -341,7 +341,7 @@ export class BrowserFileWatcher {
           `[BrowserFileWatcher] Content changes detected:`,
           changes.map((c) => c.path),
         );
-        const event: ContentChangeEvent = { changes };
+        const event: ContentChangeEvent = { watchId, changes };
         this.emit({ type: "fs-content-changed", payload: event });
       }
     } catch (error) {
